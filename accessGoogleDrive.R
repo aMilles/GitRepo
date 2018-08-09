@@ -5,8 +5,10 @@ library(stringi)
 library(pscl)
 library(MASS)
 library(corrplot)
-segments <- readOGR("Z:/GEC/segments.shp")
-segments_test <- readOGR("Z:/GEC/segments_GEE.shp")
+
+rm(list = ls()[which(ls() != "segments")])
+if(!"segments" %in% ls()) segments <- rgdal::readOGR("Z:/GEC/segments.shp")
+
 
 #make sure to download latest update of the predictor
 preds <- drive_ls("GEC")
@@ -123,8 +125,6 @@ for(col in names(all.preds)[which(!names(all.preds) %in% c("ID", "CC", "COUNT", 
   hist(all.preds[,col])
 }
 
-
-install.packages('ihs')
 
 #scale non-factor predictors
 scale_transformed <- transformed

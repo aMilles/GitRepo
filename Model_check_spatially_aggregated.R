@@ -10,10 +10,15 @@ library(MBA)
 rm(list = ls()[which(ls() != "segments")])
 if(!"segments" %in% ls()) segments <- readOGR("Z:/GEC/segments_GEE.shp")
 #load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_xval_5km.RData")
-load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_xval_LSO_5km.RData")
+#load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_xval_LSO_5km.RData")
 #load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_xval_LOSO_5km.RData")
+load("Z:/NEMO_out/output_KEN_ZWE_simple_binomial_nonspatial_spatial_xval_LOSO_5km.RData")
+xy_backup -> xy
+
 xy2 <- read.csv("Z:/modelling/yxtable.csv")[,-c(1)]
+unique(xy2$Site)
 xy2 <- xy2[match(as.character(xy$ID), as.character(xy2$ID)),]
+unique(xy2$Site)
 xy[, 1:21] <- xy2
 xy <- xy[,1:22]
 names(xy)
@@ -56,7 +61,8 @@ for(i in c("spatial_pred", "nonspatial_pred")){
   print(paste0(i, ": binomial sum ", sum(xy[,i])))
   print(paste0("observed binomial sum ", sum(xy$obs)))
   plot(xy[,i], xy$obs, pch = "|", main = i)
-  print(cor(xy[,i], xy$obs, method = "spearman")^2)
+  print(paste0("Spearman: ",cor(xy[,i], xy$obs, method = "spearman")^2))
+  print(paste0("Pearson: ", cor(xy[,i], xy$obs, method = "pearson")^2))
   print("####################")
 }
 summaries <- data.frame(rbind(do.call(rbind, nonspatial_summary), do.call(rbind, spatial_summary)))
@@ -72,20 +78,23 @@ predictors <- data.frame("predictor" = rep(row.names(nonspatial_summary[[1]]), l
   ggplot(predictors, aes(x = predictor, y = value, col = Site, ymax = upper, ymin = lower))+
     geom_point()+
     geom_errorbar()+
-    facet_wrap(~spatial)+
+    facet_wrap(~spatial, nc = 1)+
     ylab("coefficient estimate"))
 
 # Spatial analysis
 #add observations and predictions to the segments
-segments_CC <- segments[match(as.character(xy$ID), as.character(segments$ID)),]
+matchs <- match(as.character(xy$ID), as.character(segments$ID))
+summary(matchs)
+segments_CC <- segments_new
+segments_CC$SC <- NULL
+  #segments[match(as.character(xy$ID), as.character(segments$ID)),]
 
 segs <- segments_CC
 segs_cent <- geosphere::centroid(segs)
 segs <- cbind(long = segs_cent[,1], lat = segs_cent[,2], data.frame(segs))
 
-segments_df <- cbind(data.frame(segs_cent), data.frame(segments_CC), xy)
+segments_df <- cbind(data.frame(segs_cent), xy, data.frame(segments_CC))
 names(segments_df)[c(1,2)] <- c("long", "lat") 
-
 
 spatial_dep <- segments_df
 spatial_dep <- subset(spatial_dep, Site == "ZWE_MAT")
@@ -158,9 +167,12 @@ map_site <- function(df = segments_df, p = "spatial_pred", o = "obs", plot.what 
   if(plot.what == "r"){
     gg_resid_hist <- 
       ggplot()+
-      geom_histogram(data = df[samples.df, ], aes(x = input), bins = 100)+
+      geom_histogram(data = df, aes(x = input, col = o, fill = o), bins = 100)+
+      scale_y_log10()+
       xlab("residuals (o - p)")+
+      ylab("log10(count)")+
       theme_gray()+
+      theme(legend.position = "none")+
       xlim(c(-1,1))
     
     #print("create scatter")
@@ -204,21 +216,17 @@ map_site(df = segments_df, o = "obs", p = "LD", plot.what = "p", title = "non-sp
 
 for(i in seq(10)) dev.off()
 {
-  pdf(file = paste0("Z:/residual_analysis/",tools::file_path_sans_ext(output_name), ".pdf"), onefile = T,paper = "a4" )
+  pdf(file = paste0("Z:/residual_analysis/",tools::file_path_sans_ext(output_name), ".pdf"), onefile = T,paper = "a4", width = 8.27, height = 11.69)
     plot(spatial_dep_non_spatial_m$mean.of.class, spatial_dep_non_spatial_m$correlation, type = "l", lty = "dashed", main = "correlogram, ZWE_MAT")
     lines(x = spatial_dep_spatial_m$mean.of.class, y = spatial_dep_spatial_m$correlation, lty = "solid", col = "green")
     map_site(df = segments_df, o = "obs", p = "spatial_pred", plot.what = "r", title = "Residuals: spat model")
     map_site(df = segments_df, o = "obs", p = "nonspatial_pred", plot.what = "r", title = "Residuals: nspat model")
-    map_site(df = segments_df, o = "obs", p = "LD", plot.what = "p", title = "LD - Livestock Density")
-    map_site(df = segments_df, o = "obs", p = "NB", plot.what = "p", title = "NB - Slope")
-    map_site(df = segments_df, o = "obs", p = "SC", plot.what = "p", title = "SC - Seasonal Cycle")
-    map_site(df = segments_df, o = "obs", p = "VD", plot.what = "p", title = "VD - Vegetation Density")
-    map_site(df = segments_df, o = "obs", p = "WA", plot.what = "p", title = "WA - Water Availability")
+    for(predictor in rev(strsplit(f, " +")[[1]][-seq(2, length(strsplit(f, " +")[[1]]), 2)])[-1]){
+      map_site(df = segments_df, o = "obs", p = predictor, plot.what = "p", title = predictor)
+    }
   dev.off()
 }
-
-
-
+dev.off()
 
 # 
 # bc_bbox <- make_bbox(lat = lat, lon = long, data = spatial_dep)

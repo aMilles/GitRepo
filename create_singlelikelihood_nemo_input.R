@@ -6,6 +6,7 @@ library(INLA)
 rm(list = ls()[which(ls() != "segments")])
 if(!"segments" %in% ls()) segments <- rgdal::readOGR("Z:/GEC/segments.shp")
 xy <- read.csv("Z:/modelling/yxtable_scaled_transformed.csv")[,-c(1)]
+
 #create setup
 model.type = "simple"
 model.family = "binomial"
@@ -14,7 +15,7 @@ selection.level = "Country" #"Country" or "Site"
 nb_dist = 5000 #maximum distance considered as a neighbor [m]
 xval = T #prepare data for cross validation
 xval.type = "LSO" #LSO = leave some out, LOSO = leave one site out, KOSI = keep one site in
-LSO.folds = 10 #number of folds
+LSO.folds = 5 #number of folds
 # define simple/complex formula and spatial model
 {
   if(model.type == "complex"){
@@ -99,7 +100,7 @@ if(xval){
 
 
 
-for(block in ls(pattern = "^xy_without_")) plot(is.na(get(block)$obs), pch = "|", cex = .5)
+for(block in ls(pattern = "^xy_without_")) plot(is.na(get(block)$obs), pch = "|", cex = .5, xlim = c(0,1000), main = "block")
 
 #create an output name, that defines setup characteristics, will be used in NEMO later on.
 {
