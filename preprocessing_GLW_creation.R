@@ -24,7 +24,7 @@ tlu_total_single[tlu_total_single > 400] <- 400
 tlu <- crop(tlu_total_single, africa)
 africa <- fasterize(sf::st_as_sf(africa), tlu)
 tlu <- africa * tlu
-plot(tlu)
 
+#save raster file (will be uploaded to GEE)
 writeRaster(x = tlu, filename = "Z:/GLW/TLU.tif", overwrite = T)
 

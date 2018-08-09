@@ -19,7 +19,6 @@ files <- files[-grep(files, pattern = "ZAF_Kru")]
 datasets <- vector("list", length(files)) 
 for(i in seq(length(files))) datasets[[i]] <- as.data.frame(readxl::read_xlsx(files[i], skip = 1, sheet = "RSO"))
 
-
 #############################
 #### WEIRD CASE HANDLING ####
 #############################
@@ -55,6 +54,20 @@ for(i in seq(length(files))){
   df <- datasets[[i]]
     
   df$survey_code <- ds.names[i]
+  
+  df -> datasets[[i]]
+}
+
+
+#check wether there are NAS in count
+for(i in seq(length(files))){
+  df <- datasets[[i]]
+  
+  if(sum(is.na(df$photo_corrected_count) & is.na(df$observed_count)) > 0){
+    print(sum(is.na(df$photo_corrected_count) & is.na(df$observed_count)))
+    if("number_out" %in% names(df)) df$photo_corrected_count[is.na(df$photo_corrected_count)] <- df$number_out[is.na(df$photo_corrected_count)]
+    print(sum(is.na(df$photo_corrected_count) & is.na(df$observed_count)))
+  } 
   
   df -> datasets[[i]]
 }
@@ -346,8 +359,11 @@ xy <- red.df[, c("lon","lat")]
 
 spdf <- SpatialPointsDataFrame(coords = xy, data = red.df,
                                proj4string = CRS("+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0"))
-
+red.df$photo_corrected_count[is.na(red.df$photo_corrected_count)] <- red.df$observed_count[is.na(red.df$photo_corrected_count)] 
+summary(as.numeric(red.df$photo_corrected_count))
 writeOGR(spdf, "GEC_points.shp", "GEC_points.shp", "ESRI Shapefile")
 
+red.df_eleonly <- red.df[red.df$observation_code %in% c("mh", "bh", "ele_unkown"), ]
+writeOGR(spdf, "GEC_points_eleonly.shp", "GEC_points_eleonly.shp", "ESRI Shapefile")
 
 

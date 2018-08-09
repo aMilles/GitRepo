@@ -4,11 +4,9 @@ library(rgeos)
 library(rgdal)
 library(foreign)
 
-setwd("Z:")
-shapes <- list.files(pattern = ".shp$", recursive = T)
+setwd("Z:/")
+shapes <- list.files(pattern = "WDPA_Apr2017-shapefile-polygons.shp", recursive = T)
 shapes <- shapes[grep("WDPA", shapes)]
-shapes
-#for(i in seq(length(shapes))) assign(basename(shapes[i]), readOGR(shapes[i]))
 
 cc<-ccodes()
 cc<-cc[which(cc$CONTINENT == "Africa" & !cc$SOVEREIGN %in% c("France", "United Kingdom")),]

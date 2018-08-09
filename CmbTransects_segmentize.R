@@ -23,7 +23,7 @@ GEC <- readOGR(dsn = "GEC_points.shp")
 
 #get all the shape and xlsx. files of the GEC
 
-shp.files <- list.files(pattern = "transects.shp$", recursive = T)
+shp.files <- list.files(pattern = "_transects.shp$", recursive = T)
 shp_names <- unlist(lapply(strsplit(basename(shp.files), "_transect"), function(x) x[1]))
 xlsx.files <- list.files(pattern = "elephants.xlsx$", recursive = T)
 xlsx.files <- xlsx.files[which(seq(length(xlsx.files)) %in% grep("normalized", xlsx.files) &
@@ -43,9 +43,9 @@ unlist(lapply(GEC_split, function(x) sum(x[which(x$obsrvt_ %in% c("bh", "mh", "e
 
 ##### COMBINE ALL TRANSECTS TO A SINGLE OBJECT ##### 
 out <- vector("list", length = length(shp.files))
-std_crs<- crs(shape_AGO_Lui_transects.shp)
-for(i in shp.files) assign(paste0("shape_", basename(i)), readOGR(i))
 
+for(i in shp.files) assign(paste0("shape_", basename(i)), readOGR(i))
+std_crs<- crs(shape_AGO_Lui_transects.shp)
 #STEP 1: UNIFY THE SHAPEFILES TO ONE FORMAT WITH ID AND SURVEY_CODE GIVEN, TRANSFORM CRS IF NECCESSARY TO LONLAT
 for(i in ls(pattern = "^shape_")){
   shp <- get(i)
@@ -82,17 +82,17 @@ scalar1 <- function(x) {
 }
 
 uvs <- t(apply(a, 1, scalar1))
-plot(uvs)
-text(uvs, labels = degree)
-degree[which(degree < 0)]
 #STEP 3: CALCULATE DEGREE
 degree <- round(asin(uvs[,1])*180/pi, 0)
 degree <- ifelse(uvs[,2] < 0, 90  + 90 - degree, 
                    ifelse(uvs[,1] < 0 & uvs[,2] > 0, 90 + degree + 270, degree)) 
 degree <- ifelse(degree == 360, 0, degree)
+plot(uvs)
+text(uvs, labels = degree)
+degree[which(degree < 0)]
+
 #calculate degree of each transect, with 0 being northwards, clockwise increase
 transects$DEGREE <- abs(degree)
-hist(abs(degree))
 transects$dx <- uvs[,1]
 transects$dy <- uvs[,2]
 
@@ -175,7 +175,8 @@ create_polys <- function(x){
   Y_S <- x[1,2]
   Y_E <- x[2,2]
   
-  #0.75 aus Mittelwert der Ruanda-Daten geschätzt!!
+  #0.75 aus Mittelwert der Ruanda-Daten geschätzt!! 
+  # w_strp = Flight Area * 1e+06 / Strip Length / 2
   w_strp <- 0.75 * 1e+06 / 2500 / 2 
 
  #Get the distance rquired to cover the whole length of the transect by 2500 segments
@@ -238,8 +239,11 @@ segments <- lapply(se_coords, create_polys)
 
 transects_4326 <- spTransform(transects_102024, "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs ")
 segments_4326 <- lapply(segments, function(x) spTransform(x, "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs "))
+for(i in seq(length(segments_4326))) segments_4326[[i]]$SC <- transects[i,]$survey_code
+for(i in seq(length(segments_4326))) segments_4326[[i]]$CC <- strsplit(segments_4326[[i]]$SC, "_")[[1]][1]
+segments_4326 <- do.call(rbind, segments_4326)
 
 rgdal::writeOGR(segments_4326, "Z:/GEC/segments.shp", "segments.shp", "ESRI Shapefile")
-rgdal::writeOGR(transects_4326, "Z:/GEC/segments.shp", "segments.shp", "ESRI Shapefile")
+#rgdal::writeOGR(transects_4326, "Z:/GEC/segments.shp", "segments.shp", "ESRI Shapefile")
 
 
