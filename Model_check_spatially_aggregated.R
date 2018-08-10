@@ -12,23 +12,28 @@ if(!"segments" %in% ls()) segments <- readOGR("Z:/GEC/segments_GEE.shp")
 #load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_xval_5km.RData")
 #load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_xval_LSO_5km.RData")
 #load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_xval_LOSO_5km.RData")
-load("Z:/NEMO_out/output_KEN_ZWE_simple_binomial_nonspatial_spatial_xval_LOSO_5km.RData")
+#load("Z:/NEMO_out/output_KEN_ZWE_simple_binomial_nonspatial_spatial_xval_LOSO_5km.RData")
+#load("Z:/NEMO_out/output_all_simple_binomial_nonspatial_spatial_xval_LSO_5km.RData")
+load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_xval_LOSO_5km_splines.RData")
+#load("Z:/NEMO_out/output_ZWE_simple_zeroinflated.binomial.0_nonspatial_spatial_xval_LOSO_5km.RData")
+
 xy_backup -> xy
 
+#replace scaled and transformed xy values with original values
 xy2 <- read.csv("Z:/modelling/yxtable.csv")[,-c(1)]
 unique(xy2$Site)
 xy2 <- xy2[match(as.character(xy$ID), as.character(xy2$ID)),]
 unique(xy2$Site)
 xy[, 1:21] <- xy2
 xy <- xy[,1:22]
-names(xy)
-if(model.family == "binomial" & xval){
-  link.function <- function(x) exp(x)/(1 + exp(x))
+
+if(model.family %in% c("binomial", "zeroinflated.binomial.0", "zeroinflated.binomial.1") & xval){
+  link.function <- function(x) exp(x)/(1 + exp(x)) #logit
   if(!"obs" %in% names(xy)) xy$obs <- xy$dnd
 }
-xval.type
+m$logfile
 identifier <- ifelse(xval.type %in% c("Site", "LOSO"), 4, 3)
-
+plot(m$summary.linear.predictor$`0.5quant`)
 spatial_summary <- nonspatial_summary <- vector("list", length(ls(pattern = "_nonspatial_model$")))
 pred.site.names <- NULL
 for(model in ls(pattern = "_nonspatial_model$")){
@@ -212,7 +217,8 @@ map_site <- function(df = segments_df, p = "spatial_pred", o = "obs", plot.what 
 }
 
 segments_df$Block <- segments_df$Site
-map_site(df = segments_df, o = "obs", p = "LD", plot.what = "p", title = "non-spatial model")
+segments_df$WA <- segments_df$WA/1000
+map_site(df = segments_df, o = "obs", p = "WA", plot.what = "p", title = "non-spatial model")
 
 for(i in seq(10)) dev.off()
 {
@@ -226,8 +232,28 @@ for(i in seq(10)) dev.off()
     }
   dev.off()
 }
-dev.off()
 
+for(i in seq(10)) dev.off()
+{
+  pdf(file = paste0("Z:/residual_analysis/", selection, "_predictors.pdf"), onefile = T,paper = "a4", width = 8.27, height = 11.69)
+  
+  for(pred in names(segments_df[,3:21])[which(!names(segments_df[,3:21]) %in% c("ID", "CC", "COUNT", "HT", "PA", "Site", "Transect", "Country"))]){
+    map_site(df = segments_df, o = "obs", p = pred, plot.what = "p", title = pred)
+  }
+  
+  dev.off() 
+}
+
+gg.xy <- cbind(xy_without_ZWE_MAT[, rev(strsplit(f, " +")[[1]][-seq(2, length(strsplit(f, " +")[[1]]), 2)])[-1]], xy[,c("obs", "nonspatial_pred", "spatial_pred")])
+gg.xy <- reshape2::melt(gg.xy, id.vars = c("nonspatial_pred", "spatial_pred", "obs"))
+
+  ggplot(gg.xy, aes(x = value, y = obs))+
+    geom_smooth()+
+    facet_wrap(~variable, scales = "free")
+
+
+
+segm
 # 
 # bc_bbox <- make_bbox(lat = lat, lon = long, data = spatial_dep)
 #  sc_surface <- get_map(location = bc_bbox, source = "google", maptype = "terrain")
@@ -239,6 +265,5 @@ dev.off()
 #  
 #  terrain <- 
 #    ggmap(sc_satellite) +
-#    ggtitle("Site: ZWE_MAT")
-
+#    ggtitle("Site: ZWE_MAT"))
 

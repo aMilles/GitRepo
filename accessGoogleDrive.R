@@ -54,7 +54,7 @@ for(seg in seq(nrow(segments))){
     (1 - diff2SoDs[SoDs_next[2]]) * TC[seg, SoDs_next[2] + 1]
 }
 TC <- TC[,c("ID", "approx")]
-
+TC$approx <- unlist(TC$approx)
 #WA
 WA <- aggregate(WA$mean, by = list(WA$ID), FUN = function(x) mean(x, na.rm = T))
 names(WA) <- c("ID", "WA")
@@ -112,8 +112,9 @@ for(col in names(all.preds)[which(!names(all.preds) %in% c("ID", "CC", "COUNT", 
   }else{
     transformed[,col] <- cov^bc_value
   }
+  print(bc_value)
   bc_values <- append(bc_values, bc_value)
-  
+  print(bc_values)
 
   par(mfrow = c(2,2))
   qqnorm(transformed[,col], main = paste0(col, " transformed"))
@@ -125,11 +126,59 @@ for(col in names(all.preds)[which(!names(all.preds) %in% c("ID", "CC", "COUNT", 
   hist(all.preds[,col])
 }
 
+#save and check transforming parameters - plots should look the same
+
+transform_sheet <- 
+data.frame(name = names(all.preds)[which(!names(all.preds) %in% c("ID", "CC", "COUNT", "HT", "PA", "Site", "Transect", "Country"))],
+           value = bc_values, shift = 0)
+
+for(pred in names(all.preds)[which(!names(all.preds) %in% c("ID", "CC", "COUNT", "HT", "PA", "Site", "Transect", "Country"))]){
+  
+  bt_value = transform_sheet$value[which(transform_sheet$name == pred)]
+  if(bt_value == 0) bt <- exp(transformed[,pred])
+  if(bt_value != 0) bt <- transformed[,pred]^(1/bt_value)
+  
+  shift <- median(orig - (bt + abs(min(all.preds[,pred])) + 1e-64))
+  transform_sheet$shift[which(transform_sheet$name == pred)] <- shift
+  hist(orig, main = paste0("original ", pred))
+  hist((bt + abs(min(all.preds[,pred])) + 1e-64 + shift), main = paste0("backtransformed ", pred))
+} 
+
+
+write.csv(transform_sheet, "Z:/modelling/transform_sheet.csv")
 
 #scale non-factor predictors
 scale_transformed <- transformed
-for(col in which(!names(transformed) %in% c("ID", "CC", "HT", "PA", "COUNT", "Country", "Transect", "Site"))) scale_transformed[,col] <- scale(transformed[,col])
 
+centers <- NULL
+scales <- NULL
+names <- NULL
+for(col in which(!names(transformed) %in% c("ID", "CC", "HT", "PA", "COUNT", "Country", "Transect", "Site"))){
+  scale_transformed[,col] <- scale(transformed[,col])
+  centers <- append(centers, attr(scale_transformed[,col], "scaled:center"))
+  scales <- append(scales, attr(scale_transformed[,col], "scaled:scale"))
+  names <- append(names, col)
+} 
+
+#save and check scaling parameters - plots should look the same
+
+scale_sheet <- data.frame("center" = centers, "scale" = scales, "name" = names(all.preds)[which(!names(all.preds) %in% c("ID", "CC", "COUNT", "HT", "PA", "Site", "Transect", "Country"))])
+
+for(pred in names(all.preds)[which(!names(all.preds) %in% c("ID", "CC", "COUNT", "HT", "PA", "Site", "Transect", "Country"))]){
+  orig <- transformed[, pred]
+  scaled <- scale_transformed[, pred]
+  
+  center_value = scale_sheet$center[which(scale_sheet$name == pred)]
+  scale_value = scale_sheet$scale[which(scale_sheet$name == pred)]
+  
+  
+  us <- scaled * scale_value + center_value
+  
+  hist(orig, main = paste0("original ", pred))
+  hist(us, main = paste0("unscaled ", pred))
+}
+
+write.csv(scale_sheet, "Z:/modelling/scale_sheet.csv")
 
 #check how the scaled, transformed values are distributed in comparison to the original values
 par(mfrow = c(2,2))
