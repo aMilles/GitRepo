@@ -8,16 +8,16 @@ if(!"segments" %in% ls()) segments <- rgdal::readOGR("Z:/GEC/segments.shp")
 xy <- read.csv("Z:/modelling/yxtable_scaled_transformed.csv")[,-c(1)]
 
 #create setup
-model.type = "simple"
+model.type = "complex"
 model.family = "binomial"
-selection = c("ZWE", "KEN") #ISO3 Country Code or "all" if non selection should be made, Site Codes if sites are selected ("ZWE_MAT")
+selection = c("ZWE", "BWA") #ISO3 Country Code or "all" if non selection should be made, Site Codes if sites are selected ("ZWE_MAT")
 selection.level = "Country" #"Country" or "Site"
 nb_dist = 5000 #maximum distance considered as a neighbor [m]
-xval = T #prepare data for cross validation
+xval = F #prepare data for cross validation
 xval.type = "LSO" #LSO = leave some out, LOSO = leave one site out, KOSI = keep one site in
 LSO.folds = 10 #number of folds
-splines = c("WA", "VD") #transform these predictors to splines
-n.knots = 2 #number of knots per spline per predictor
+splines = c("WA", "VD", "PI", "TD", "NA.") #transform these predictors to splines
+n.knots = 3 #number of knots per spline per predictor
 
 
 output_name <- paste0(paste0(selection, collapse = "_"), "_", model.type, "_", model.family, "_nonspatial_spatial_", ifelse(xval, paste0("xval_", xval.type, "_"), ""), nb_dist/1000, "km", ifelse(all(is.na(splines)), "", "_splines"), ".RData")
@@ -27,14 +27,13 @@ source("Z:/GitRepo/function_file.R")
 {
   if(model.type == "complex"){
     f <- 
-      "AI + HD + LD + CC + NA. + NB + PA + PI + SC + SL + SM + TC + TD + VD + WA + Site"
-    #WA^2 + PI^2 + 
-    #SC:WA + SC:VD + TC:WA + TC:VD + PA:PI + Site:PI + LD:VD"
+      "AI + HD + LD + CC + NA. + NB + PA + PI + SC + SL + SM + TC + TD + VD + WA + Site +
+       SC:WA + SC:VD + TC:WA + TC:VD + LD:VD + PA:PI + Site:PI"
   }
   
   if(model.type == "simple"){
-    f <- "LD + NB + SC + VD + WA"
-    for(spline in splines) f <- stringi::stri_replace_all_regex(f, spline, paste0(spline, seq(n.knots), collapse = " + "))
+    f <- "LD + NB + SC + VD + WA + SC:WA"
+    for(spline in splines) f <- stringi::stri_replace_all_regex(f, paste0(" ",spline), paste0(spline, seq(n.knots), collapse = " + "))
     #f <- "LD + NB + SC + VD + WA + f(Site, model =\"iid\")"
   }
   
@@ -46,7 +45,6 @@ source("Z:/GitRepo/function_file.R")
     xy$obs <- xy$COUNT
   }
   
-
   f.nonspatial <- formula(paste0("obs ~", f))
   f.spatial <- formula(paste0(paste(as.character(f.nonspatial)[c(2,1,3)], collapse = " "), "+ f(ID, model = \"besag\", graph = \"", tools::file_path_sans_ext(output_name),"_nb.txt\", param = c(0.1, 0.5))"))
   #f.spatial <- formula(paste0(paste(as.character(f.nonspatial)[c(2,1,3)], collapse = " "), "+ f(ID, model = \"besag\", graph = \"dinla.txt\", param = c(0.1, 0.5))"))

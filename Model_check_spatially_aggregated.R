@@ -26,8 +26,12 @@ if(!"buffer" %in% ls()) buffer <- readOGR("Z:/GEC/buffered_segments.shp")
 #load("Z:/NEMO_out/output_all_simple_binomial_nonspatial_spatial_xval_LSO_5km.RData")
 #load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_xval_LOSO_5km_splines.RData")
 #load("Z:/NEMO_out/output_ZWE_simple_zeroinflated.binomial.0_nonspatial_spatial_xval_LOSO_5km.RData")
-load("Z:/NEMO_out/output_all_complex_binomial_nonspatial_spatial_5km_splines.RData")
+#load("Z:/NEMO_out/output_all_complex_binomial_nonspatial_spatial_5km_splines.RData")
 
+load("Z:/NEMO_out/output_ZWE_complex_binomial_nonspatial_spatial_5km_splines.RData")
+#load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_xval_LSO_5km.RData")
+#load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_5km_splines.RData")
+#load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_xval_LOSO_5km_splines.RData")
 
 xy_backup <- xy
 
@@ -35,8 +39,8 @@ xy_backup <- xy
 xy2 <- read.csv("Z:/modelling/yxtable.csv")[,-c(1)]
 unique(xy2$Site)
 xy2 <- xy2[match(as.character(xy$ID), as.character(xy2$ID)),]
-xy[, 1:21] <- xy2
-xy <- xy[,1:22]
+xy[, names(xy2)] <- xy2
+if(is.numeric(xy$ID)) xy$ID <- segments_new$ID
 
 if(model.family %in% c("binomial", "zeroinflated.binomial.0", "zeroinflated.binomial.1") & xval){
   link.function <- function(x) exp(x)/(1 + exp(x)) #logit
@@ -81,7 +85,7 @@ if(!xval){
 # for(block in ls(pattern = "xy_without_")[seq(1,length(ls(pattern = "xy_without_")), 3)]) plot(is.na(get(block)$obs))
 # m$summary.linear.predictor$`0.5quant`
 
-fit_summary <- read.csv("Z:/residual_analysis/summary.csv")[,-1]
+fit_summary <- read.csv("Z:/residual_analysis/summary.csv", stringsAsFactors = F)[,-1]
 
 #Rough Summary
 Efrons <- NULL

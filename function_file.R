@@ -185,7 +185,7 @@ effect.plot <- function(quantiles, lines, df, rug, with.lines, effect.of){
     theme_bw() 
   
   if(with.lines) gg <- gg + geom_line(data = lines, aes(x = pred, y = value * 100, group = variable), col = "red", alpha = .1)
-  if(rug) gg <- gg + geom_point(data = df, aes(x = pred, y = zero), shape = "|", alpha = .1)
+  if(rug) gg <- gg + geom_point(data = df[sample(seq(nrow(df)), 1000),], aes(x = pred, y = zero), shape = "|", alpha = .1)
   
   if(!rug){
     gg <- grid.arrange(
@@ -204,24 +204,36 @@ effect.plot <- function(quantiles, lines, df, rug, with.lines, effect.of){
 
 
 #GENERATE CONDITIONALS
-conditional.plot <- function(cond.vars = seqs[, names(seqs) %in% preds], effect.of = "VD", model = spatial_model, posterior.samples = 500, original.df, with.lines = F, rug = T){
-  cond.vars[,-match(effect.of, names(cond.vars))] <- t(replicate(nrow(cond.vars),apply(cond.vars[,-match(effect.of, names(cond.vars))], 2, median), simplify = T))
+conditional.plot <- function(cond.vars, effect.of, model, posterior.samples, original.df, with.lines = F, rug = F, splines, interactions){
   
+  #fix all values except for the splines/values of effect of (use substring instead of match to identify splines, the | is for interactions like VD:WA for a WA effect plot)
+  keep.dynamic <- which(substring(effect.of,1,2) == substring(names(cond.vars),1,2) |
+                        substring(effect.of,1,2) == substring(names(cond.vars),4,5))
+  
+  cond.vars[,-keep.dynamic] <- t(replicate(nrow(cond.vars),
+                                          apply(cond.vars[,-keep.dynamic], 2, median),
+                                          simplify = T))
+  
+  for(interaction in interactions){
+    cond.vars[, interaction] <- model.matrix(as.formula(paste0("~", interaction)), cond.vars)[,2]
+  }
+
   dist <- sample.fixed.params(model = model, nsample = posterior.samples)
   dist <- dist[,colnames(dist) %in% names(cond.vars)]
-  dist <- dist[,match(names(dist), names(cond.vars))]
-  
+  cond.vars <- cond.vars[,match(names(dist), names(cond.vars))]
+
   m.cond.vars <- as.matrix(cond.vars)
   m.dist <- as.matrix(dist)
-  
   out <- vector("list", length = nrow(m.dist))
+
   for(i in seq(nrow(m.dist))) out[[i]] <- as.vector(invlogit(m.cond.vars %*% m.dist[i,]))
+
   if(with.lines) gg.out.all <- reshape2::melt(data.frame(do.call(cbind, out), pred = original.seqs[,effect.of]), id.vars = "pred")
-  gg.out.q <- data.frame(t(apply(do.call(cbind, out), 1, quantile, probs = c(0.025, 0.5, 0.975))), pred = original.seqs[,effect.of])
+  gg.out.q <- data.frame(t(apply(do.call(cbind, out), 1, function(x) quantile(x, probs = c(0.025, 0.5, 0.975), na.rm = T))), pred = original.seqs[,effect.of])
   names(gg.out.q)[1:3] <- c("lower", "mid", "upper")
   original.df <- data.frame(pred = original.df[,effect.of], zero = 0)
-  
+
   gg <- effect.plot(quantiles = gg.out.q, lines = gg.out.all, df = original.df, rug = rug, with.lines = with.lines, effect.of = effect.of)
-  
+
   return(gg)
 }
