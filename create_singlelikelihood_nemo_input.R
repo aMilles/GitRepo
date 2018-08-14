@@ -10,31 +10,30 @@ xy <- read.csv("Z:/modelling/yxtable_scaled_transformed.csv")[,-c(1)]
 #create setup
 model.type = "simple"
 model.family = "binomial"
-selection = c("ZWE") #ISO3 Country Code or "all" if non selection should be made, Site Codes if sites are selected ("ZWE_MAT")
+selection = c("ZWE", "KEN") #ISO3 Country Code or "all" if non selection should be made, Site Codes if sites are selected ("ZWE_MAT")
 selection.level = "Country" #"Country" or "Site"
 nb_dist = 5000 #maximum distance considered as a neighbor [m]
-xval = F #prepare data for cross validation
+xval = T #prepare data for cross validation
 xval.type = "LSO" #LSO = leave some out, LOSO = leave one site out, KOSI = keep one site in
 LSO.folds = 10 #number of folds
-splines <- c("WA", "VD")
-n.knots <- 2
+splines = c("WA", "VD") #transform these predictors to splines
+n.knots = 2 #number of knots per spline per predictor
+
 
 output_name <- paste0(paste0(selection, collapse = "_"), "_", model.type, "_", model.family, "_nonspatial_spatial_", ifelse(xval, paste0("xval_", xval.type, "_"), ""), nb_dist/1000, "km", ifelse(all(is.na(splines)), "", "_splines"), ".RData")
 source("Z:/GitRepo/function_file.R")
-
-
 
 # define simple/complex formula and spatial model
 {
   if(model.type == "complex"){
     f <- 
-      "AI + HD + LD + NB + PA + PI + SC + SL + SM + TC + TD + VD + WA + Site + 
-    WA^2 + PI^2 + 
-    SC:WA + SC:VD + TC:WA + TC:VD + PA:PI + Site:PI + LD:VD"
+      "AI + HD + LD + CC + NA. + NB + PA + PI + SC + SL + SM + TC + TD + VD + WA + Site"
+    #WA^2 + PI^2 + 
+    #SC:WA + SC:VD + TC:WA + TC:VD + PA:PI + Site:PI + LD:VD"
   }
   
   if(model.type == "simple"){
-    f <- "LD + NB + SC + VD + WA + Site"
+    f <- "LD + NB + SC + VD + WA"
     for(spline in splines) f <- stringi::stri_replace_all_regex(f, spline, paste0(spline, seq(n.knots), collapse = " + "))
     #f <- "LD + NB + SC + VD + WA + f(Site, model =\"iid\")"
   }
@@ -47,23 +46,16 @@ source("Z:/GitRepo/function_file.R")
     xy$obs <- xy$COUNT
   }
   
-  
+
   f.nonspatial <- formula(paste0("obs ~", f))
-  #f.spatial <- formula(paste0(paste(as.character(f.nonspatial)[c(2,1,3)], collapse = " "), "+ f(ID, model = \"besag\", graph = ", output_name,"_nb.txt, param = c(0.1, 0.5))"))
-  f.spatial <- formula(paste0(paste(as.character(f.nonspatial)[c(2,1,3)], collapse = " "), "+ f(ID, model = \"besag\", graph = \"dinla.txt\", param = c(0.1, 0.5))"))
+  f.spatial <- formula(paste0(paste(as.character(f.nonspatial)[c(2,1,3)], collapse = " "), "+ f(ID, model = \"besag\", graph = \"", tools::file_path_sans_ext(output_name),"_nb.txt\", param = c(0.1, 0.5))"))
+  #f.spatial <- formula(paste0(paste(as.character(f.nonspatial)[c(2,1,3)], collapse = " "), "+ f(ID, model = \"besag\", graph = \"dinla.txt\", param = c(0.1, 0.5))"))
   }
 
 #create function to run different models
 inla.fun <- function(x, formula, family){
   return(inla(formula, data = x, control.predictor = list(compute = T), family = family))
 }
-
-# r = inla(..., control.inla = list(
-#   
-#   correct = TRUE,
-#   
-#   correct.factor = <VALUE>))
-
 
 #create a subset of the data if selected
 if(!"all" %in% selection) xy <- xy[xy[,selection.level] %in% selection, ]
@@ -74,6 +66,7 @@ for(i in c("ID", "CC", "HT", "PA", "Site", "Country", "Transect")){
 #splines
 for(spline in splines){
   splined <- data.frame(spliner(xy[,match(spline, names(xy))], n.knots))
+  for(i in ncol(splined))  splined[,i] <- scale(splined[,i])
   names(splined) <- paste0(spline, seq(n.knots))
   xy <- cbind(xy, splined)
 }
@@ -116,32 +109,9 @@ if(xval){
 } 
 
 
-#WORK IN PROGRESS... 
-if(effect){
-  tf_sheet <- read.csv("Z:/modelling/transform_sheet.csv")
-  scale_sheet <- read.csv("Z:/modelling/scale_sheet.csv")
-  #scale_sheet$name <- tf_sheet$name
-  xy_backup -> xy
-
-  bt_mins <- us_mins <- mins <- apply(xy[,tf_sheet$name], 1, min)
-  bt_maxs <- us_maxs <- maxs <- apply(xy[,tf_sheet$name], 1, max)
-  
-  for(i in length(mins)){
-    us_mins[i] <- mins[i] * scale_sheet$scale[i] + scale_sheet$center[i]
-    us_maxs[i] <- maxs[i] * scale_sheet$scale[i] + scale_sheet$center[i]
-    # bt_mins[i] <- 
-    # bt_maxs[i] <-
-  }
-#   seq()
-}
-
-
-
-
 for(block in ls(pattern = "^xy_without_")) plot(is.na(get(block)$obs), pch = "|", cex = .5, xlim = c(0,1000), main = "block")
 
 #create an output name, that defines setup characteristics, will be used in NEMO later on.
 {
   save(list = ls()[!ls() %in% c("segments", "metric_segs")], file = paste0("Z:/NEMO_in/input_", output_name))
 }
-output_name

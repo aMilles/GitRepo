@@ -21,26 +21,16 @@ for(i in seq(length(pred.choice))){
   times <- as.POSIXct(times, format = "%FT%T")
   pred.choice[i] <- subset[which.max(times)]
 }
-preds
+
 #download and read predictors
 for(i in pred.choice) drive_download(path = paste0("Z:/predictors/", preds[i,1]), file = preds[i,], overwrite = T)
 for(pred in list.files("Z:/predictors")) assign(gsub(".csv", "", pred), read.csv(paste0("Z:/predictors/", pred)))
 HT <- HT[,2:3]
 COUNT <- COUNT[,2:3]
-summary(TC)
 #replace NA with 0 in protected areas predictor
 PA$max[is.na(PA$max)] <- 0
-summary(PA)
-
 segments$gpx_time <- as.POSIXct(segments$gpx_time, origin = "1970-01-01", tz = "UTC")
-data.frame(segments[segments$ID %in% SC$ID[is.na(SC$mean)],])
-data.frame(segments[segments$ID %in% VD$ID[is.na(VD$mean)],])
-data.frame(segments[segments$ID %in% NB$ID[is.na(NB$mean)],])
-data.frame(segments[segments$ID %in% NB$ID[is.na(NB$mean)],])
 
-summary(NB)
-summary(VD)
-summary(WA)
 
 #TC <- read.csv("Z:/predictors/TC.csv")
 TC$approx <- NA
@@ -79,21 +69,21 @@ all.preds$Country <- segments$CC
 all.preds$Transect <- unlist(lapply(strsplit(as.character(all.preds$ID), "p"), function(x) x[1]))
 
 
-
+all.preds$HT <- as.character(all.preds$HT)
+all.preds$HT <- ifelse(is.na(all.preds$HT), "none", all.preds$HT)
+all.preds <- na.omit(all.preds)
+write.csv(all.preds, "Z:/modelling/yxtable.csv")
 ###
 
-write.csv(all.preds, "Z:/modelling/yxtable.csv")
+
 
 #scale non-factor predictors
 #for(col in which(!names(all.preds) %in% c("ID", "CC", "HT", "PA", "COUNT"))) all.preds[,col] <- scale(all.preds[,col])
 
 #write.csv(all.preds, "Z:/modelling/yxtable_scaled.csv")
 
-summary(all.preds)
-#transform 
-all.preds$HT <- as.character(all.preds$HT)
-all.preds$HT <- ifelse(is.na(all.preds$HT), "none", all.preds$HT)
-all.preds <- na.omit(all.preds)
+#transform
+
 transformed <- all.preds
 
 bc_values <- NULL
@@ -133,6 +123,7 @@ data.frame(name = names(all.preds)[which(!names(all.preds) %in% c("ID", "CC", "C
            value = bc_values, shift = 0)
 
 for(pred in names(all.preds)[which(!names(all.preds) %in% c("ID", "CC", "COUNT", "HT", "PA", "Site", "Transect", "Country"))]){
+  orig <- all.preds[, pred]
   
   bt_value = transform_sheet$value[which(transform_sheet$name == pred)]
   if(bt_value == 0) bt <- exp(transformed[,pred])
@@ -146,6 +137,7 @@ for(pred in names(all.preds)[which(!names(all.preds) %in% c("ID", "CC", "COUNT",
 
 
 write.csv(transform_sheet, "Z:/modelling/transform_sheet.csv")
+write.csv(transformed, "Z:/modelling/yxtable_transformed.csv")
 
 #scale non-factor predictors
 scale_transformed <- transformed
