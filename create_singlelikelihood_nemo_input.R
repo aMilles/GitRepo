@@ -10,14 +10,14 @@ xy <- read.csv("Z:/modelling/yxtable_scaled_transformed.csv")[,-c(1)]
 #create setup
 model.type = "complex"
 model.family = "binomial"
-selection = c("ZWE", "BWA") #ISO3 Country Code or "all" if non selection should be made, Site Codes if sites are selected ("ZWE_MAT")
-selection.level = "Country" #"Country" or "Site"
+selection = c("BWA_NOR", "KEN_LAI", "KEN_TSV", "XWA_TBC", "ZWE_MAT", "ZWE_ZV", "ZWE_SELV") #ISO3 Country Code or "all" if non selection should be made, Site Codes if sites are selected ("ZWE_MAT")
+selection.level = "Site" #"Country" or "Site"
 nb_dist = 5000 #maximum distance considered as a neighbor [m]
 xval = F #prepare data for cross validation
 xval.type = "LSO" #LSO = leave some out, LOSO = leave one site out, KOSI = keep one site in
 LSO.folds = 10 #number of folds
-splines = c("WA", "VD", "PI", "TD", "NA.") #transform these predictors to splines
-n.knots = 3 #number of knots per spline per predictor
+splines = c("AI", "LD", "WA", "VD", "PI", "TD", "NA.") #transform these predictors to splines
+n.knots = 2 #number of knots per spline per predictor
 
 
 output_name <- paste0(paste0(selection, collapse = "_"), "_", model.type, "_", model.family, "_nonspatial_spatial_", ifelse(xval, paste0("xval_", xval.type, "_"), ""), nb_dist/1000, "km", ifelse(all(is.na(splines)), "", "_splines"), ".RData")
@@ -29,6 +29,7 @@ source("Z:/GitRepo/function_file.R")
     f <- 
       "AI + HD + LD + CC + NA. + NB + PA + PI + SC + SL + SM + TC + TD + VD + WA + Site +
        SC:WA + SC:VD + TC:WA + TC:VD + LD:VD + PA:PI + Site:PI"
+    for(spline in splines) f <- stringi::stri_replace_all_regex(f, paste0(" ",spline), paste0(spline, seq(n.knots), collapse = " + "))
   }
   
   if(model.type == "simple"){

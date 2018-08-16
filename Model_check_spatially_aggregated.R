@@ -27,11 +27,11 @@ if(!"buffer" %in% ls()) buffer <- readOGR("Z:/GEC/buffered_segments.shp")
 #load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_xval_LOSO_5km_splines.RData")
 #load("Z:/NEMO_out/output_ZWE_simple_zeroinflated.binomial.0_nonspatial_spatial_xval_LOSO_5km.RData")
 #load("Z:/NEMO_out/output_all_complex_binomial_nonspatial_spatial_5km_splines.RData")
-
-load("Z:/NEMO_out/output_ZWE_complex_binomial_nonspatial_spatial_5km_splines.RData")
+#load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_5km_splines.RData")
 #load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_xval_LSO_5km.RData")
 #load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_5km_splines.RData")
 #load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_xval_LOSO_5km_splines.RData")
+load("Z:/NEMO_out/output_BWA_NOR_KEN_LAI_KEN_TSV_XWA_TBC_ZWE_MAT_ZWE_ZV_ZWE_SELV_complex_binomial_nonspatial_spatial_5km_splines.RData")
 
 xy_backup <- xy
 
@@ -98,7 +98,7 @@ for(i in c("spatial_pred", "nonspatial_pred")){
   print("####################")
 }
 
-if(!output_name %in% fit_summary$dataset) fit_summary<- rbind(fit_summary, c(output_name, Efrons, f))
+if(!output_name %in% fit_summary$dataset) fit_summary<- rbind(fit_summary, c(output_name, Efrons, as.character(f.nonspatial)[3]))
 write.csv(fit_summary,"Z:/residual_analysis/summary.csv")
 
 
@@ -119,8 +119,8 @@ ggplot(fit.df, aes(x = detection_ratio, y = `effron's R-squared`, group = model,
   geom_point(size = 5)+
   geom_smooth(method = "lm")+
   facet_wrap(~model, nc = 1, scales = "free")
-
-
+fit.df[fit.df$detection_ratio > 0.1,]
+dev.off()
 
 #Variation of coefficients
 summaries <- data.frame(rbind(do.call(rbind, nonspatial_summary), do.call(rbind, spatial_summary)))

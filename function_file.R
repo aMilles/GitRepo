@@ -173,47 +173,17 @@ sample.fixed.params <- function(model = model_test, nsample = 10000, param = "")
 }
 
 
-#### GENERAL BUILD OF AN EFFECT PLOT
-effect.plot <- function(quantiles, lines, df, rug, with.lines, effect.of){
-  
-  gg <- 
-    ggplot()+
-    geom_ribbon(data = quantiles, aes(x = pred, ymin = lower*100, ymax = upper*100), fill = "gray")+
-    geom_line(data = quantiles, aes(x = pred, y = mid*100), size = 1.5)+
-    xlab(effect.of)+
-    ylab("propability [%]")+
-    theme_bw() 
-  
-  if(with.lines) gg <- gg + geom_line(data = lines, aes(x = pred, y = value * 100, group = variable), col = "red", alpha = .1)
-  if(rug) gg <- gg + geom_point(data = df[sample(seq(nrow(df)), 1000),], aes(x = pred, y = zero), shape = "|", alpha = .1)
-  
-  if(!rug){
-    gg <- grid.arrange(
-      gg + theme(plot.margin=unit(c(-0.08,1,1,1), "cm")), 
-      ggplot(df, aes(x = pred))+
-        geom_histogram(bins = 100, col = "black", fill = "gray")+
-        theme_void()+
-        ggtitle(paste0("Effect of: ", effect.of))+
-        theme(plot.margin=unit(c(.3,1,-0.08,1), "cm")),
-      layout_matrix = matrix(c(2,rep(1,7),2,rep(1,7)), nc = 2))
-  }
-  
-  
-  return(gg)
-}
-
-
-#GENERATE CONDITIONALS
-conditional.plot <- function(cond.vars, effect.of, model, posterior.samples, original.df, with.lines = F, rug = F, splines, interactions){
+#all possible combinations of factors used by the model - currently not used, factor effect is set to zero  
+conditional.plot <- function(cond.vars, effect.of, model, posterior.samples, original.df, with.lines = F, rug = F, splines, interactions, factor.values, prob.inner = c(0.25, 0.5, 0.75), prob.outer = c(0.025, 0.975), fix.fun = function(x) median(x)){
   
   #fix all values except for the splines/values of effect of (use substring instead of match to identify splines, the | is for interactions like VD:WA for a WA effect plot)
-  keep.dynamic <- which(substring(effect.of,1,2) == substring(names(cond.vars),1,2) |
-                        substring(effect.of,1,2) == substring(names(cond.vars),4,5))
-  
-  cond.vars[,-keep.dynamic] <- t(replicate(nrow(cond.vars),
-                                          apply(cond.vars[,-keep.dynamic], 2, median),
-                                          simplify = T))
-  
+    keep.dynamic <- which(substring(effect.of,1,2) == substring(names(cond.vars),1,2) |
+                            substring(effect.of,1,2) == substring(names(cond.vars),4,5))
+    keep.dynamic <- c(keep.dynamic, which(names(cond.vars) %in% factor.values))
+    cond.vars[,-keep.dynamic] <- t(replicate(nrow(cond.vars),
+                                             apply(cond.vars[,-keep.dynamic], 2, fix.fun),
+                                             simplify = T))
+
   for(interaction in interactions){
     cond.vars[, interaction] <- model.matrix(as.formula(paste0("~", interaction)), cond.vars)[,2]
   }
@@ -221,19 +191,143 @@ conditional.plot <- function(cond.vars, effect.of, model, posterior.samples, ori
   dist <- sample.fixed.params(model = model, nsample = posterior.samples)
   dist <- dist[,colnames(dist) %in% names(cond.vars)]
   cond.vars <- cond.vars[,match(names(dist), names(cond.vars))]
-
+  
   m.cond.vars <- as.matrix(cond.vars)
   m.dist <- as.matrix(dist)
   out <- vector("list", length = nrow(m.dist))
-
+  
   for(i in seq(nrow(m.dist))) out[[i]] <- as.vector(invlogit(m.cond.vars %*% m.dist[i,]))
-
+  
   if(with.lines) gg.out.all <- reshape2::melt(data.frame(do.call(cbind, out), pred = original.seqs[,effect.of]), id.vars = "pred")
-  gg.out.q <- data.frame(t(apply(do.call(cbind, out), 1, function(x) quantile(x, probs = c(0.025, 0.5, 0.975), na.rm = T))), pred = original.seqs[,effect.of])
-  names(gg.out.q)[1:3] <- c("lower", "mid", "upper")
+  
+  gg.out.q.inner <- data.frame(t(apply(do.call(cbind, out), 1, function(x) quantile(x, probs = prob.inner, na.rm = T))), pred = original.seqs[,effect.of])
+  gg.out.q.outer <- data.frame(t(apply(do.call(cbind, out), 1, function(x) quantile(x, probs = prob.outer, na.rm = T))), pred = original.seqs[,effect.of])
+  
+  names(gg.out.q.inner)[1:3] <- c("lower", "mid", "upper")
+  names(gg.out.q.outer)[1:2] <- c("lower", "upper")
+  
   original.df <- data.frame(pred = original.df[,effect.of], zero = 0)
+  
+  gg <- effect.plot(quantiles.i = gg.out.q.inner, 
+                    quantiles.o = gg.out.q.outer, 
+                    lines = gg.out.all, 
+                    df = original.df, 
+                    rug = rug, 
+                    with.lines = with.lines, 
+                    effect.of = effect.of)
+  
+  return(gg)
+}
 
-  gg <- effect.plot(quantiles = gg.out.q, lines = gg.out.all, df = original.df, rug = rug, with.lines = with.lines, effect.of = effect.of)
 
+
+marginal.plot <- function(marg.vars, effect.of, model, posterior.samples, original.df, scaled.df, rug = F, splines, interactions, factor.values, prob, fix.fun = function(x) median(x), original.seqs = original.seqs, n.cores = 1, silent = F){
+  
+  if(!silent) print('initialize matrix')
+  keep.dynamic <- which(substring(effect.of,1,2) == substring(names(marg.vars),1,2) |
+                          substring(effect.of,1,2) == substring(names(marg.vars),4,5))
+  keep.dynamic <- c(keep.dynamic, which(names(marg.vars) %in% factor.values))
+  
+  marg.vars.ss <- data.frame(marg.vars[, keep.dynamic])
+  rownames(marg.vars.ss) <- NULL
+  ext.marg <- marg.vars.ss[rep(seq(nrow(marg.vars.ss)), each = nrow(scaled.df)),]
+  if(!silent) print(head(ext.marg))
+  
+  dist <- sample.fixed.params(model = model, nsample = posterior.samples)
+  dist <- dist[,colnames(dist) %in% c("(Intercept)", names(marg.vars))]
+  if(!silent) print(head(dist))
+  
+  for(interaction in interactions){
+    scaled.df[, interaction] <- model.matrix(as.formula(paste0("~", interaction)), scaled.df)[,2]
+  }
+  
+  scaled.df <- data.matrix(scaled.df)
+  scaled.df <- scaled.df[,match(names(dist), colnames(scaled.df))]
+  row.names(scaled.df) <- NULL
+  if(!silent) print(head(scaled.df))
+  
+  ext.df <- scaled.df[rep(seq(nrow(scaled.df)), each = nrow(marg.vars.ss)),]
+  ext.df[,1] <- rep(1, nrow(ext.df))
+  colnames(ext.df)[1] <- "(Intercept)"
+  if(!silent) print(head(ext.df))
+  
+  
+  ext.df[, na.omit(match(names(ext.marg), colnames(ext.df)))] <- as.matrix(ext.marg[na.omit(match(colnames(ext.df), names(ext.marg)))])
+  if(!silent) print(head(ext.df))
+  
+  
+  m.dist <- as.matrix(dist)
+
+  if(!silent) print('calculate probabilities')
+  
+  strt<-Sys.time()
+  
+  if(n.cores != 1) {
+    cl <- makeCluster(n.cores)
+    registerDoSNOW(cl)
+    inner_strt <- Sys.time()  
+    
+  } 
+  
+  
+  out <- foreach(i =  seq(nrow(marg.vars)), .combine = "rbind", .export = c("prob")) %dopar% {
+    dprobs <- vector("list", length = posterior.samples)
+    this.rows <- seq(nrow(scaled.df)) + (nrow(scaled.df) * (i - 1))
+    if(!silent) print(range(this.rows))
+    
+    for(j in seq(posterior.samples)) dprobs[[j]] <- as.vector(invlogit(ext.df[this.rows,] %*% m.dist[j,]))
+    
+    dprobs <- do.call(cbind, dprobs)
+    return(quantile(dprobs, probs = c(0.025, 0.25, 0.5, 0.75, 0.975), na.rm = T))
+  } 
+   
+  
+  if(n.cores != 1) { 
+    print(Sys.time - inner_strt)
+    stopCluster(cl)
+  } 
+  
+  print(Sys.time() - strt)
+  
+  gg.out.q.inner <- data.frame(out[,2:4])
+  names(gg.out.q.inner)[1:3] <- c("lower", "mid", "upper")
+  gg.out.q.outer <- data.frame(out[,c(1,5)])
+  names(gg.out.q.outer)[1:2] <- c("lower", "upper")
+  gg.out.q.outer$pred <- gg.out.q.inner$pred <- original.seqs[,effect.of]
+  original.df$pred <- original.df[,effect.of]
+  
+  return(list(gg.out.q.inner, gg.out.q.outer, original.df, effect.of))
+}
+
+  
+
+effect.plot <- function(quantiles.i, quantiles.o, lines, df, rug, with.lines, effect.of){
+  
+  gg <- 
+    ggplot()+
+    geom_ribbon(data = quantiles.o, aes(x = pred, ymin = lower*100, ymax = upper*100), fill = "lightgray", alpha = .5)+
+    geom_ribbon(data = quantiles.i, aes(x = pred, ymin = lower*100, ymax = upper*100), fill = "gray")+
+    geom_line(data = quantiles.i, aes(x = pred, y = mid*100), size = 1.5)+
+    xlab(effect.of)+
+    ylab("propability [%]")+
+    theme_bw() 
+  
+   if(with.lines) gg <- gg + geom_line(data = lines, aes(x = pred, y = value * 100, group = variable), col = "red", alpha = .1)
+  # if(rug) gg <- gg + geom_point(data = df[sample(seq(nrow(df)), 1000),], aes(x = pred, y = 0.01), shape = "|", alpha = .1)
+   if(rug) gg <- gg + geom_point(data = df, aes(x = pred, y = 100), shape = "|", alpha = .1)
+  
+  
+   if(!rug){
+     gg <- grid.arrange(
+       gg + theme(plot.margin=unit(c(-0.08,1,1,1), "cm")),
+       ggplot(df, aes(x = pred))+
+         geom_histogram(bins = 100, col = "black", fill = "gray")+
+         theme_void()+
+         ggtitle(paste0("Effect of: ", effect.of))+
+         theme(plot.margin=unit(c(.3,1,-0.08,1), "cm")),
+       layout_matrix = matrix(c(2,rep(1,7),2,rep(1,7)), nc = 2))
+   }
+
+  
   return(gg)
 }

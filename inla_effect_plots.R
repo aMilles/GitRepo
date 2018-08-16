@@ -1,27 +1,20 @@
 library(INLA)
-library(rgdal)
 library(ggplot2)
-library(ggmap)
-library(maps)
-library(mapdata)
-library(spdep)
-library(MBA)
-library(DescTools)
-library(ggthemes)
-library(rasterVis)
-library(raster)
-library(grid)
-library(scales)
-library(viridis)
 library(gridExtra)
+library(parallel)
+library(foreach)
+library(doSNOW)
 
 #read Model output from nemo
 #load("Z:/NEMO_out/output_all_complex_binomial_nonspatial_spatial_5km_splines.RData")
 #load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_xval_LSO_5km.RData")
 #load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_5km_splines.RData")
 #load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_xval_LOSO_5km_splines.RData")
-#load("Z:/NEMO_out/output_ZWE_complex_binomial_nonspatial_spatial_5km_splines.RData")
-load("Z:/NEMO_out/output_BW")
+load("Z:/NEMO_out/output_ZWE_BWA_complex_binomial_nonspatial_spatial_5km_splines.RData")
+load("Z:/NEMO_out/output_BWA_NOR_KEN_LAI_KEN_TSV_XWA_TBC_ZWE_MAT_ZWE_ZV_ZWE_SELV_complex_binomial_nonspatial_spatial_5km_splines.RData")
+#load("Z:/NEMO_out/output_ZWE_BWA_complex_binomial_nonspatial_spatial_5km_splines.RData")
+#load("Z:/NEMO_out/output_all_complex_binomial_nonspatial_spatial_5km_splines.RData")
+#load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_5km_splines.RData")
 
 
 if(is.numeric(xy$ID)) xy$ID <- segments_new$ID
@@ -53,10 +46,11 @@ if(nrow(unscaled_df) != nrow(xy)) unscaled_df <- unscaled_df[as.character(unscal
 {
   #calulcate the minima for transform shift
   mins <- apply(unscaled_df[,tf_sheet$name], 2, min)
+  maxs <- apply(unscaled_df[,tf_sheet$name], 2, max)
   #sample the 0 - 100 % quantile of the predictor ranges with length 100 
-  original.seqs <- seqs <- data.frame(apply(unscaled_df[,tf_sheet$name], 2, quantile, probs = seq(0,1,length = 100)))
+  #original.seqs <- seqs <- data.frame(apply(unscaled_df[,tf_sheet$name], 2, quantile, probs = seq(0,1,length = 100)))
   
-  #original.seqs <- seqs <- data.frame(apply(rbind(mins, maxs), 2, function(x) seq(x[1], x[2], length = 100)))
+  original.seqs <- seqs <- data.frame(apply(rbind(mins, maxs), 2, function(x) seq(x[1], x[2], length = 100)))
   
   #transform and scale the quantiles of the unscaled dataset
   for(i in seq(nrow(tf_sheet))){
@@ -82,39 +76,105 @@ if(nrow(unscaled_df) != nrow(xy)) unscaled_df <- unscaled_df[as.character(unscal
     seqs <- data.frame(seqs, this.spline)
   }  
   
+  final.preds <- unique(unlist(strsplit(preds, ":")))
+  missing.preds <- unique(final.preds)[!unique(final.preds) %in% names(seqs)]
+  seqs[,missing.preds] <- unique(xy[,missing.preds])[12,]
+  
+  interactions <- preds[as.logical(stringi::stri_count_fixed(preds, ":"))]
+  
   for(interaction in preds[as.logical(stringi::stri_count_fixed(preds, ":"))]){
     seqs[, interaction] <- model.matrix(as.formula(paste0("~", interaction)), seqs)[,2]
   }
   seqs <- cbind("(Intercept)" = 1, seqs)
 }
 
- final.preds <- unlist(strsplit(preds, ":"))
 
-#all possible combinations of factors used by the model - currently not used, factor effect is set to zero  
-missing_factors <- unique(xy[,preds[!preds %in% names(seqs)]])
-  
+#GENERATE EFFECT PLOTS
+selection <- unique(substring(names(seqs)[names(seqs) %in% preds & !names(seqs) %in% missing.preds & !names(seqs) %in% interactions],1,2))
+selection[selection == "NA"] <- "NA."
 
 source("Z:/GitRepo/function_file.R")
 
-conditional.plot(cond.vars = seqs[, names(seqs) %in% final.preds], effect.of = "WA", model = that.model, posterior.samples = 100, original.df = unscaled_df, rug = F, with.lines = T, interactions = preds[as.logical(stringi::stri_count_fixed(preds, ":"))])
+samples <- sample(nrow(unscaled_df), nrow(unscaled_df), replace = F)
+#samples <- sample(nrow(unscaled_df), 1000, replace = F)
 
-#GENERATE EFFECT PLOTS
-for(pred in unique(substring(names(seqs[, names(seqs) %in% preds]),1,2))){
-  if(pred == "NA") pred <- "NA."
-  gg <- conditional.plot(cond.vars = seqs[, names(seqs) %in% c("(Intercept)", final.preds)], effect.of = pred, model = that.model, posterior.samples = 10000, original.df = unscaled_df, rug = T, with.lines = F, interactions = preds[as.logical(stringi::stri_count_fixed(preds, ":"))]) +
-    scale_y_log10()
+for(predictor in selection) assign(
+  predictor, 
+  marginal.plot(
+    marg.vars = seqs[, names(seqs) %in% c(final.preds)], 
+    effect.of = predictor, 
+    model = that.model, 
+    posterior.samples = 50, 
+    original.df = unscaled_df[samples,],
+    scaled.df = xy[samples,],
+    interactions = interactions, 
+    factor.values = missing.preds,
+    prob = c(0.025, 0.25, 0.5, 0.75, 0.975),
+    original.seqs = original.seqs,
+    n.cores = 1,
+    silent = T))
 
-  if(pred == "LD") gg <- gg + xlim(c(0,0.3))
-  assign(pred, gg)
+for(predictor in selection){
+  out <- get(predictor)
+  effect.plot(quantiles.i = out[[1]],
+              quantiles.o = out[[2]],
+              df = out[[3]],
+              effect.of = out[[4]],
+              rug = F,
+              with.lines = F)
 }
 
 
-#SAVE THE EFFECT PLOTS
+
+#### SIMPLE ####
+gg.xy <- xy
+gg.xy[,selection] <- unscaled_df[,selection]
+gg.xy <- reshape2::melt(data.frame(gg.xy[,c("obs", selection)], "pred" = that.model$summary.fitted.values$`0.5quant`, "site" = xy$Site), id.vars = c("obs", "pred", "site"))
+
 {
-  pdf(file = paste0("Z:/Plots/effect_plots/", tools::file_path_sans_ext(output_name), ".pdf"), onefile = T)
-  for(pred in unique(substring(names(seqs[, names(seqs) %in% preds]),1,2))){
-    if(pred == "NA") pred <- "NA."
-    grid.arrange(get(pred))
-  } 
+  pdf(file = paste0("Z:/Plots/effect_plots/cheap_effect_", tools::file_path_sans_ext(output_name), ".pdf"), onefile = F)
+  ggplot(gg.xy, aes(y = pred*100, x = value))+
+    geom_smooth()+
+    geom_point(aes(y = min(pred*100), x = value), shape = "|", alpha = 0.01)+
+    facet_wrap(~variable, scales = "free")+
+    ylim(values = c(0,max(pred)))+
+    ylab("detection probability [%]")
   dev.off()
 }
+
+  
+#### CONDITIONAL ####  
+  
+  conditional.plot(cond.vars = seqs[, names(seqs) %in% c("(Intercept)", final.preds)], effect.of = "VD", model = that.model, posterior.samples = 100, original.df = unscaled_df, rug = F, with.lines = T, interactions = preds[as.logical(stringi::stri_count_fixed(preds, ":"))], factor.values = missing.preds, fix.fun = function(x) quantile(x, c(0.8)))
+  warnings()
+  
+  
+  for(pred in selection){
+    if(pred == "NA") pred <- "NA."
+    gg <- conditional.plot(
+      cond.vars = seqs[, names(seqs) %in% c("(Intercept)", final.preds)], 
+      effect.of = pred, 
+      model = that.model, 
+      posterior.samples = 10000, 
+      original.df = unscaled_df, 
+      rug = T, 
+      with.lines = F, 
+      interactions = interactions, 
+      factor.values = missing.preds,
+      prob.inner = c(0.25, 0.5, 0.75),
+      prob.outer = c(0.25, 0.5),
+      fix.fun = function(x) quantile(x, c(0.8)))
+    assign(pred, gg)
+  }
+  
+  #SAVE THE EFFECT PLOTS
+  {
+    pdf(file = paste0("Z:/Plots/effect_plots/", tools::file_path_sans_ext(output_name), ".pdf"), onefile = T)
+    for(pred in selection){
+      grid.arrange(get(pred))
+    } 
+    dev.off()
+  }
+  
+  source("Z:/GitRepo/function_file.R")
+  
