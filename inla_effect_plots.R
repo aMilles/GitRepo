@@ -134,10 +134,11 @@ gg.xy <- reshape2::melt(data.frame(gg.xy[,c("obs", selection)], "pred" = that.mo
 {
   pdf(file = paste0("Z:/Plots/effect_plots/cheap_effect_", tools::file_path_sans_ext(output_name), ".pdf"), onefile = F)
   ggplot(gg.xy, aes(y = pred*100, x = value))+
+    geom_point(alpha = 0.01)+
     geom_smooth()+
-    geom_point(aes(y = min(pred*100), x = value), shape = "|", alpha = 0.01)+
-    facet_wrap(~variable, scales = "free")+
-    ylim(values = c(0,max(pred)))+
+    #geom_point(aes(y = min(pred*100), x = value), shape = "|", alpha = 0.01)+
+    facet_grid(site~variable, scales = "free")+
+    ylim(values = c(0,100))+
     ylab("detection probability [%]")
   dev.off()
 }

@@ -221,43 +221,40 @@ conditional.plot <- function(cond.vars, effect.of, model, posterior.samples, ori
 
 
 
-marginal.plot <- function(marg.vars, effect.of, model, posterior.samples, original.df, scaled.df, rug = F, splines, interactions, factor.values, prob, fix.fun = function(x) median(x), original.seqs = original.seqs, n.cores = 1, silent = F){
+marginal.plot <- function(marg.vars, effect.of, model, posterior.samples, original.df, scaled.df, rug = F, splines, interactions, prob, fix.fun = function(x) median(x), original.seqs = original.seqs, n.cores = 1, silent = F){
   
   if(!silent) print('initialize matrix')
   keep.dynamic <- which(substring(effect.of,1,2) == substring(names(marg.vars),1,2) |
                           substring(effect.of,1,2) == substring(names(marg.vars),4,5))
-  keep.dynamic <- c(keep.dynamic, which(names(marg.vars) %in% factor.values))
   
   marg.vars.ss <- data.frame(marg.vars[, keep.dynamic])
+  if(!silent) print(colnames(marg.vars.ss))
+  
   rownames(marg.vars.ss) <- NULL
+  
   ext.marg <- marg.vars.ss[rep(seq(nrow(marg.vars.ss)), each = nrow(scaled.df)),]
-  if(!silent) print(head(ext.marg))
+  if(!silent) print(colnames(ext.marg))
   
   dist <- sample.fixed.params(model = model, nsample = posterior.samples)
-  dist <- dist[,colnames(dist) %in% c("(Intercept)", names(marg.vars))]
-  if(!silent) print(head(dist))
-  
-  for(interaction in interactions){
-    scaled.df[, interaction] <- model.matrix(as.formula(paste0("~", interaction)), scaled.df)[,2]
-  }
-  
-  scaled.df <- data.matrix(scaled.df)
+
+
   scaled.df <- scaled.df[,match(names(dist), colnames(scaled.df))]
   row.names(scaled.df) <- NULL
-  if(!silent) print(head(scaled.df))
+  if(!silent) print(colnames(scaled.df))
+
   
   ext.df <- scaled.df[rep(seq(nrow(scaled.df)), each = nrow(marg.vars.ss)),]
   ext.df[,1] <- rep(1, nrow(ext.df))
   colnames(ext.df)[1] <- "(Intercept)"
-  if(!silent) print(head(ext.df))
+  if(!silent) print(colnames(ext.df))
   
   
   ext.df[, na.omit(match(names(ext.marg), colnames(ext.df)))] <- as.matrix(ext.marg[na.omit(match(colnames(ext.df), names(ext.marg)))])
-  if(!silent) print(head(ext.df))
-  
-  
   m.dist <- as.matrix(dist)
-
+  
+  if(!silent) print(colnames(ext.df))
+  
+  
   if(!silent) print('calculate probabilities')
   
   strt<-Sys.time()
@@ -266,9 +263,7 @@ marginal.plot <- function(marg.vars, effect.of, model, posterior.samples, origin
     cl <- makeCluster(n.cores)
     registerDoSNOW(cl)
     inner_strt <- Sys.time()  
-    
   } 
-  
   
   out <- foreach(i =  seq(nrow(marg.vars)), .combine = "rbind", .export = c("prob")) %dopar% {
     dprobs <- vector("list", length = posterior.samples)
@@ -281,12 +276,12 @@ marginal.plot <- function(marg.vars, effect.of, model, posterior.samples, origin
     return(quantile(dprobs, probs = c(0.025, 0.25, 0.5, 0.75, 0.975), na.rm = T))
   } 
    
-  
+ 
   if(n.cores != 1) { 
     print(Sys.time - inner_strt)
     stopCluster(cl)
   } 
-  
+ 
   print(Sys.time() - strt)
   
   gg.out.q.inner <- data.frame(out[,2:4])

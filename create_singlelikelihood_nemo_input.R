@@ -8,32 +8,34 @@ if(!"segments" %in% ls()) segments <- rgdal::readOGR("Z:/GEC/segments.shp")
 xy <- read.csv("Z:/modelling/yxtable_scaled_transformed.csv")[,-c(1)]
 
 #create setup
-model.type = "complex"
+model.type = "simple"
 model.family = "binomial"
-selection = c("BWA_NOR", "KEN_LAI", "KEN_TSV", "XWA_TBC", "ZWE_MAT", "ZWE_ZV", "ZWE_SELV") #ISO3 Country Code or "all" if non selection should be made, Site Codes if sites are selected ("ZWE_MAT")
-selection.level = "Site" #"Country" or "Site"
+selection = "ZWE" #ISO3 Country Code or "all" if non selection should be made, Site Codes if sites are selected ("ZWE_MAT") c("BWA_NOR", "KEN_LAI", "KEN_TSV", "XWA_TBC", "ZWE_MAT", "ZWE_ZV", "ZWE_SELV")
+selection.level = "Country" #"Country" or "Site"
 nb_dist = 5000 #maximum distance considered as a neighbor [m]
 xval = F #prepare data for cross validation
 xval.type = "LSO" #LSO = leave some out, LOSO = leave one site out, KOSI = keep one site in
 LSO.folds = 10 #number of folds
-splines = c("AI", "LD", "WA", "VD", "PI", "TD", "NA.") #transform these predictors to splines
+splines = NA #transform these predictors to splines c("AI", "LD", "WA", "VD", "PI", "TD", "NA.")
 n.knots = 2 #number of knots per spline per predictor
+ridge = F #ridge regression
+precision = 1e-5 #1e-4 is default
+  
 
-
-output_name <- paste0(paste0(selection, collapse = "_"), "_", model.type, "_", model.family, "_nonspatial_spatial_", ifelse(xval, paste0("xval_", xval.type, "_"), ""), nb_dist/1000, "km", ifelse(all(is.na(splines)), "", "_splines"), ".RData")
+output_name <- paste0(paste0(selection, collapse = "_"), "_", model.type, "_", model.family, "_nonspatial_spatial_", ifelse(xval, paste0("xval_", xval.type, "_"), ""), nb_dist/1000, "km", ifelse(all(is.na(splines)), "", "_splines"), ifelse(ridge, "_ridge", paste0("_prec",precision)), ".RData")
 source("Z:/GitRepo/function_file.R")
 
 # define simple/complex formula and spatial model
 {
   if(model.type == "complex"){
     f <- 
-      "AI + HD + LD + CC + NA. + NB + PA + PI + SC + SL + SM + TC + TD + VD + WA + Site +
-       SC:WA + SC:VD + TC:WA + TC:VD + LD:VD + PA:PI + Site:PI"
+      "AI + HD + LD + NA. + NB + PA + PI + SM + TD + VD + WA + Site +
+       SC:WA + SC:VD + TC:WA + CC:WA + TC:VD + LD:VD + PA:PI + Site:PI"
     for(spline in splines) f <- stringi::stri_replace_all_regex(f, paste0(" ",spline), paste0(spline, seq(n.knots), collapse = " + "))
   }
   
   if(model.type == "simple"){
-    f <- "LD + NB + SC + VD + WA + SC:WA"
+    f <- "LD + NB + SC + VD + WA"
     for(spline in splines) f <- stringi::stri_replace_all_regex(f, paste0(" ",spline), paste0(spline, seq(n.knots), collapse = " + "))
     #f <- "LD + NB + SC + VD + WA + f(Site, model =\"iid\")"
   }
@@ -46,14 +48,26 @@ source("Z:/GitRepo/function_file.R")
     xy$obs <- xy$COUNT
   }
   
+  f <- stringi::stri_replace_all_regex(f, "\n", "")
+  #if(ridge) f <- paste0("-1 + X +  f(idx.Z, model=\"z\", Z=Z)")
+  
   f.nonspatial <- formula(paste0("obs ~", f))
   f.spatial <- formula(paste0(paste(as.character(f.nonspatial)[c(2,1,3)], collapse = " "), "+ f(ID, model = \"besag\", graph = \"", tools::file_path_sans_ext(output_name),"_nb.txt\", param = c(0.1, 0.5))"))
-  #f.spatial <- formula(paste0(paste(as.character(f.nonspatial)[c(2,1,3)], collapse = " "), "+ f(ID, model = \"besag\", graph = \"dinla.txt\", param = c(0.1, 0.5))"))
+ 
   }
 
 #create function to run different models
-inla.fun <- function(x, formula, family){
-  return(inla(formula, data = x, control.predictor = list(compute = T), family = family))
+inla.fun <- function(x, formula, family, ridge, precision){
+  #if(!ridge) 
+  
+  return(inla(formula, data = x, control.predictor = list(compute = T), family = family, control.fixed=list(mean=0,prec=precision)))
+  
+  # if(ridge){
+  #   n <- nrow(x)
+  #   X <- matrix(1,nr = n, nc = 1)
+  #   Z <- x
+  #   return(inla(formula, data = list(y= x$obs, idx.Z = 1:n, X=X), control.predictor = list(compute=TRUE), family = family))
+  }
 }
 
 #create a subset of the data if selected
