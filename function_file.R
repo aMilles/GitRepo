@@ -226,9 +226,9 @@ marginal.plot <- function(marg.vars, effect.of, model, posterior.samples, origin
   if(!silent) print('initialize matrix')
   keep.dynamic <- which(substring(effect.of,1,2) == substring(names(marg.vars),1,2) |
                           substring(effect.of,1,2) == substring(names(marg.vars),4,5))
-  print(keep.dynamic)
+
   marg.vars.ss <- as.matrix(marg.vars[, keep.dynamic], nc = length(keep.dynamic))
-  print(head(marg.vars.ss))
+
   rownames(marg.vars.ss) <- NULL
   ext.marg <- as.matrix(marg.vars.ss[rep(seq(nrow(marg.vars.ss)), each = nrow(scaled.df)),], nc = length(keep.dynamic))
   colnames(ext.marg) <- names(marg.vars[keep.dynamic])
@@ -236,24 +236,16 @@ marginal.plot <- function(marg.vars, effect.of, model, posterior.samples, origin
   
   dist <- sample.fixed.params(model = model, nsample = posterior.samples)
 
-
-
   row.names(scaled.df) <- NULL
   ext.df <- scaled.df[rep(seq(nrow(scaled.df)), nrow(marg.vars.ss)),]
   ext.df[,na.omit(match(colnames(ext.marg), colnames(ext.df)))] <- NULL
   ext.df <- cbind(ext.df, ext.marg)
-  print(head(ext.df))
-  # ext.df[, na.omit(match(colnames(ext.marg), colnames(ext.df)))] <- 
-  #   ext.marg[,which(colnames(ext.marg) %in% colnames(ext.df))]
   ext.df <- model.matrix(as.formula(paste0("~", formula)), ext.df)
   
 
   if(!silent) print('calculate probabilities')
   
   strt<-Sys.time()
-  
- 
-  #m.dist <- as.matrix(dist)
   
   out <- foreach(i =  seq(nrow(marg.vars)), .combine = "rbind", .export = c("prob")) %dopar% {
     
