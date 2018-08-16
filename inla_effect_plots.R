@@ -10,9 +10,9 @@ library(doSNOW)
 #load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_xval_LSO_5km.RData")
 #load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_5km_splines.RData")
 #load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_xval_LOSO_5km_splines.RData")
-load("Z:/NEMO_out/output_ZWE_BWA_complex_binomial_nonspatial_spatial_5km_splines.RData")
-load("Z:/NEMO_out/output_BWA_NOR_KEN_LAI_KEN_TSV_XWA_TBC_ZWE_MAT_ZWE_ZV_ZWE_SELV_complex_binomial_nonspatial_spatial_5km_splines.RData")
 #load("Z:/NEMO_out/output_ZWE_BWA_complex_binomial_nonspatial_spatial_5km_splines.RData")
+#load("Z:/NEMO_out/output_BWA_NOR_KEN_LAI_KEN_TSV_XWA_TBC_ZWE_MAT_ZWE_ZV_ZWE_SELV_complex_binomial_nonspatial_spatial_5km_splines.RData")
+load("Z:/NEMO_out/output_ZWE_complex_binomial_nonspatial_spatial_5km_splines.RData")
 #load("Z:/NEMO_out/output_all_complex_binomial_nonspatial_spatial_5km_splines.RData")
 #load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_5km_splines.RData")
 
@@ -95,24 +95,47 @@ selection[selection == "NA"] <- "NA."
 
 source("Z:/GitRepo/function_file.R")
 
-samples <- sample(nrow(unscaled_df), nrow(unscaled_df), replace = F)
-#samples <- sample(nrow(unscaled_df), 1000, replace = F)
+check <- marginal.plot(
+  marg.vars = seqs[, names(seqs) %in% c(final.preds)], 
+  effect.of = "PI", 
+  model = that.model, 
+  posterior.samples = 5, 
+  original.df = unscaled_df,
+  scaled.df = xy,
+  interactions = interactions, 
+  prob = c(0.025, 0.25, 0.5, 0.75, 0.975),
+  original.seqs = original.seqs,
+  n.cores = 1,
+  silent = F,
+  formula = f)
 
+out <- check
+effect.plot(quantiles.i = out[[1]],
+            quantiles.o = out[[2]],
+            df = out[[3]],
+            effect.of = out[[4]],
+            rug = F,
+            with.lines = F)
+
+samples <- sample(nrow(unscaled_df), nrow(unscaled_df), replace = F)
+#samples <- sample(nrow(unscaled_df), 10, replace = F)
+scaled.df <- model.matrix(as.formula(paste0("~", f)), xy)
 for(predictor in selection) assign(
   predictor, 
   marginal.plot(
     marg.vars = seqs[, names(seqs) %in% c(final.preds)], 
     effect.of = predictor, 
     model = that.model, 
-    posterior.samples = 50, 
-    original.df = unscaled_df[samples,],
-    scaled.df = xy[samples,],
+    posterior.samples = 20, 
+    original.df = unscaled_df,
+    scaled.df = xy,
     interactions = interactions, 
-    factor.values = missing.preds,
     prob = c(0.025, 0.25, 0.5, 0.75, 0.975),
     original.seqs = original.seqs,
     n.cores = 1,
-    silent = T))
+    silent = F,
+    formula = f))
+
 
 for(predictor in selection){
   out <- get(predictor)
@@ -126,6 +149,9 @@ for(predictor in selection){
 
 
 
+sample.fixed.params(model = that.model, nsample = 10)
+
+as.formula(paste0("~", paste0(interactions, collapse = "+")))
 #### SIMPLE ####
 gg.xy <- xy
 gg.xy[,selection] <- unscaled_df[,selection]

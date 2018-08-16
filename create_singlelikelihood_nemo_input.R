@@ -19,7 +19,7 @@ LSO.folds = 10 #number of folds
 splines = NA #transform these predictors to splines c("AI", "LD", "WA", "VD", "PI", "TD", "NA.")
 n.knots = 2 #number of knots per spline per predictor
 ridge = F #ridge regression
-precision = 1e-5 #1e-4 is default
+precision = 1e-4 #1e-4 is default
   
 
 output_name <- paste0(paste0(selection, collapse = "_"), "_", model.type, "_", model.family, "_nonspatial_spatial_", ifelse(xval, paste0("xval_", xval.type, "_"), ""), nb_dist/1000, "km", ifelse(all(is.na(splines)), "", "_splines"), ifelse(ridge, "_ridge", paste0("_prec",precision)), ".RData")
@@ -77,12 +77,15 @@ for(i in c("ID", "CC", "HT", "PA", "Site", "Country", "Transect")){
 }
 
 #splines
-for(spline in splines){
-  splined <- data.frame(spliner(xy[,match(spline, names(xy))], n.knots))
-  for(i in ncol(splined))  splined[,i] <- scale(splined[,i])
-  names(splined) <- paste0(spline, seq(n.knots))
-  xy <- cbind(xy, splined)
+if(!all(is.na(splines))){
+  for(spline in splines){
+    splined <- data.frame(spliner(xy[,match(spline, names(xy))], n.knots))
+    for(i in ncol(splined))  splined[,i] <- scale(splined[,i])
+    names(splined) <- paste0(spline, seq(n.knots))
+    xy <- cbind(xy, splined)
+  }
 }
+
 
 
 #create the neighborhood
