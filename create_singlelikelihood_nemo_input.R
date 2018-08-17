@@ -10,13 +10,13 @@ xy <- read.csv("Z:/modelling/yxtable_scaled_transformed.csv")[,-c(1)]
 #create setup
 model.type = "complex"
 model.family = "binomial"
-selection = "ZWE" #ISO3 Country Code or "all" if non selection should be made, Site Codes if sites are selected ("ZWE_MAT") c("BWA_NOR", "KEN_LAI", "KEN_TSV", "XWA_TBC", "ZWE_MAT", "ZWE_ZV", "ZWE_SELV")
+selection = "all" #ISO3 Country Code or "all" if non selection should be made, Site Codes if sites are selected ("ZWE_MAT") c("BWA_NOR", "KEN_LAI", "KEN_TSV", "XWA_TBC", "ZWE_MAT", "ZWE_ZV", "ZWE_SELV")
 selection.level = "Country" #"Country" or "Site"
 nb_dist = 5000 #maximum distance considered as a neighbor [m]
 xval = F #prepare data for cross validation
 xval.type = "LSO" #LSO = leave some out, LOSO = leave one site out, KOSI = keep one site in
 LSO.folds = 10 #number of folds
-splines = c("WA", "VD", "AI") #transform these predictors to splines c("AI", "LD", "WA", "VD", "PI", "TD", "NA.")
+splines = c("WA", "VD", "AI", "LD", "TV") #transform these predictors to splines c("AI", "LD", "WA", "VD", "PI", "TD", "NA.")
 n.knots = 2 #number of knots per spline per predictor
 ridge = F #ridge regression
 precision = 1e-4 #1e-4 is default
@@ -29,8 +29,8 @@ source("Z:/GitRepo/function_file.R")
 {
   if(model.type == "complex"){
     f <- 
-      "AI + HD + LD + NA. + NB + PA + PI + SM + TD + VD + WA + Site +
-       SC:WA + SC:VD + TC:WA + CC:WA + TC:VD + LD:VD + PA:PI + Site:PI"
+      "AI + LD + TV + PI + SM + VD + WA +
+       SC:WA + SC:VD + TC:WA + CC:WA + TV:SM + TC:VD + TD:VD + LD:VD + PA:PI + Site:PI + HD:AI + Site:WA + Site:VD + f(Site, model =\"iid\")"
     for(spline in splines) f <- stringi::stri_replace_all_regex(f, paste0(" ",spline), paste0(spline, seq(n.knots), collapse = " + "))
   }
   

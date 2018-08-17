@@ -93,26 +93,28 @@ if(nrow(unscaled_df) != nrow(xy)) unscaled_df <- unscaled_df[as.character(unscal
 selection <- unique(substring(names(seqs)[names(seqs) %in% preds & !names(seqs) %in% missing.preds & !names(seqs) %in% interactions],1,2))
 selection[selection == "NA"] <- "NA."
 
+dist <- sample.fixed.params(that.model, 10)
+
 source("Z:/GitRepo/function_file.R")
 
 check <- marginal.plot(
   marg.vars = seqs[, names(seqs) %in% c(final.preds)], 
   effect.of = "PI", 
-  model = that.model, 
-  posterior.samples = 5, 
+  posterior.dist = dist, 
   original.df = unscaled_df,
   scaled.df = xy,
   interactions = interactions, 
   prob = c(0.025, 0.25, 0.5, 0.75, 0.975),
   original.seqs = original.seqs,
-  n.cores = 1,
   silent = F,
   formula = f)
 
 out <- check
+df <- out[[3]]
+names(df) <- "pred"
 effect.plot(quantiles.i = out[[1]],
             quantiles.o = out[[2]],
-            df = out[[3]],
+            df = df,
             effect.of = out[[4]],
             rug = F,
             with.lines = F)
