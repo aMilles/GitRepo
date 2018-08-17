@@ -221,7 +221,7 @@ conditional.plot <- function(cond.vars, effect.of, model, posterior.samples, ori
 
 
 
-marginal.plot <- function(marg.vars, effect.of, model, posterior.samples, original.df, scaled.df, rug = F, splines, interactions, prob, fix.fun = function(x) median(x), original.seqs = original.seqs, n.cores = 1, silent = F, formula){
+marginal.plot <- function(marg.vars, effect.of, posterior.dist, original.df, scaled.df, rug = F, splines, interactions, prob, fix.fun = function(x) median(x), original.seqs = original.seqs, silent = F, formula){
   
   if(!silent) print('initialize matrix')
   keep.dynamic <- which(substring(effect.of,1,2) == substring(names(marg.vars),1,2) |
@@ -232,9 +232,6 @@ marginal.plot <- function(marg.vars, effect.of, model, posterior.samples, origin
   rownames(marg.vars.ss) <- NULL
   ext.marg <- as.matrix(marg.vars.ss[rep(seq(nrow(marg.vars.ss)), each = nrow(scaled.df)),], nc = length(keep.dynamic))
   colnames(ext.marg) <- names(marg.vars[keep.dynamic])
-  
-  
-  dist <- sample.fixed.params(model = model, nsample = posterior.samples)
 
   row.names(scaled.df) <- NULL
   ext.df <- scaled.df[rep(seq(nrow(scaled.df)), nrow(marg.vars.ss)),]
@@ -252,7 +249,7 @@ marginal.plot <- function(marg.vars, effect.of, model, posterior.samples, origin
     this.rows <- seq(nrow(scaled.df)) + (nrow(scaled.df) * (i - 1))
     if(!silent) print(range(this.rows))
     
-    dprobs <- invlogit(ext.df[this.rows,] %*% t(as.matrix(dist)))
+    dprobs <- invlogit(ext.df[this.rows,] %*% t(as.matrix(posterior.dist)))
     
     return(quantile(dprobs, probs = c(0.025, 0.25, 0.5, 0.75, 0.975), na.rm = T))
   } 
@@ -267,7 +264,7 @@ marginal.plot <- function(marg.vars, effect.of, model, posterior.samples, origin
   gg.out.q.outer$pred <- gg.out.q.inner$pred <- original.seqs[,effect.of]
   original.df$pred <- original.df[,effect.of]
   
-  return(list(gg.out.q.inner, gg.out.q.outer, original.df, effect.of))
+  return(list(gg.out.q.inner, gg.out.q.outer, data.frame(original.df$pred), effect.of))
 }
 
   

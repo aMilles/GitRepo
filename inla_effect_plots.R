@@ -12,7 +12,7 @@ library(doSNOW)
 #load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_xval_LOSO_5km_splines.RData")
 #load("Z:/NEMO_out/output_ZWE_BWA_complex_binomial_nonspatial_spatial_5km_splines.RData")
 #load("Z:/NEMO_out/output_BWA_NOR_KEN_LAI_KEN_TSV_XWA_TBC_ZWE_MAT_ZWE_ZV_ZWE_SELV_complex_binomial_nonspatial_spatial_5km_splines.RData")
-load("Z:/NEMO_out/output_ZWE_complex_binomial_nonspatial_spatial_5km_splines.RData")
+load("Z:/NEMO_out/output_ZWE_BWA_complex_binomial_nonspatial_spatial_5km_splines.RData")
 #load("Z:/NEMO_out/output_all_complex_binomial_nonspatial_spatial_5km_splines.RData")
 #load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_5km_splines.RData")
 

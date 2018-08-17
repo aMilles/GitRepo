@@ -31,7 +31,7 @@ if(!"buffer" %in% ls()) buffer <- readOGR("Z:/GEC/buffered_segments.shp")
 #load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_xval_LSO_5km.RData")
 #load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_5km_splines.RData")
 #load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_xval_LOSO_5km_splines.RData")
-load("Z:/NEMO_out/output_BWA_NOR_KEN_LAI_KEN_TSV_XWA_TBC_ZWE_MAT_ZWE_ZV_ZWE_SELV_complex_binomial_nonspatial_spatial_5km_splines.RData")
+load("Z:/NEMO_out/output_ZWE_complex_binomial_nonspatial_spatial_5km_splines_prec1e-05.RData")
 
 xy_backup <- xy
 
@@ -101,7 +101,7 @@ for(i in c("spatial_pred", "nonspatial_pred")){
 if(!output_name %in% fit_summary$dataset) fit_summary<- rbind(fit_summary, c(output_name, Efrons, as.character(f.nonspatial)[3]))
 write.csv(fit_summary,"Z:/residual_analysis/summary.csv")
 
-
+spatial_model$summary.fixed
 #Fit by Site
 out <- NULL
 for(i in c("spatial_pred", "nonspatial_pred")){

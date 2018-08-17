@@ -8,7 +8,7 @@ if(!"segments" %in% ls()) segments <- rgdal::readOGR("Z:/GEC/segments.shp")
 xy <- read.csv("Z:/modelling/yxtable_scaled_transformed.csv")[,-c(1)]
 
 #create setup
-model.type = "simple"
+model.type = "complex"
 model.family = "binomial"
 selection = "ZWE" #ISO3 Country Code or "all" if non selection should be made, Site Codes if sites are selected ("ZWE_MAT") c("BWA_NOR", "KEN_LAI", "KEN_TSV", "XWA_TBC", "ZWE_MAT", "ZWE_ZV", "ZWE_SELV")
 selection.level = "Country" #"Country" or "Site"
@@ -16,7 +16,7 @@ nb_dist = 5000 #maximum distance considered as a neighbor [m]
 xval = F #prepare data for cross validation
 xval.type = "LSO" #LSO = leave some out, LOSO = leave one site out, KOSI = keep one site in
 LSO.folds = 10 #number of folds
-splines = NA #transform these predictors to splines c("AI", "LD", "WA", "VD", "PI", "TD", "NA.")
+splines = c("WA", "VD", "AI") #transform these predictors to splines c("AI", "LD", "WA", "VD", "PI", "TD", "NA.")
 n.knots = 2 #number of knots per spline per predictor
 ridge = F #ridge regression
 precision = 1e-4 #1e-4 is default
@@ -131,3 +131,4 @@ for(block in ls(pattern = "^xy_without_")) plot(is.na(get(block)$obs), pch = "|"
 {
   save(list = ls()[!ls() %in% c("segments", "metric_segs")], file = paste0("Z:/NEMO_in/input_", output_name))
 }
+
