@@ -13,6 +13,7 @@ library(raster)
 library(grid)
 library(scales)
 library(viridis)
+library(ggiraphExtra)
 rm(list = ls()[which(ls() != "segments")])
 if(!"segments" %in% ls()) segments <- readOGR("Z:/GEC/segments_GEE.shp")
 if(!"buffer" %in% ls()) buffer <- readOGR("Z:/GEC/buffered_segments.shp")
@@ -31,7 +32,12 @@ if(!"buffer" %in% ls()) buffer <- readOGR("Z:/GEC/buffered_segments.shp")
 #load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_xval_LSO_5km.RData")
 #load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_5km_splines.RData")
 #load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_xval_LOSO_5km_splines.RData")
-load("Z:/NEMO_out/output_ZWE_complex_binomial_nonspatial_spatial_5km_splines_prec1e-05.RData")
+#load("Z:/NEMO_out/output_ZWE_complex_binomial_nonspatial_spatial_5km_splines_prec1e-04_nottransformed.RData")
+#load("Z:/NEMO_out/output_ZWE_complex_binomial_nonspatial_spatial_5km_splines_prec1e-04.RData")
+#load("Z:/NEMO_out/output_ZWE_complex_binomial_nonspatial_spatial_5km_splines_prec1e-04.RData")
+#load("Z:/NEMO_out/output_BWA_NOR_KEN_LAI_KEN_TSV_XWA_TBC_ZWE_MAT_ZWE_ZV_ZWE_SELV_complex_binomial_nonspatial_spatial_5km_splines_prec1e-04.RData")
+load("Z:/NEMO_out/output_ZWE_complex_binomial_nonspatial_spatial_5km_splines_prec1e-04.RData")
+
 
 xy_backup <- xy
 
@@ -77,8 +83,9 @@ if(xval){
 if(!xval){
   xy$spatial_pred <- spatial_model$summary.fitted.values$`0.5quant`
   xy$nonspatial_pred <- nonspatial_model$summary.fitted.values$`0.5quant`
-  spatial_summary <- spatial_model$summary.fixed
-  nonspatial_summary <- nonspatial_model$summary.fixed
+  spatial_summary <- list(spatial_model$summary.fixed)
+  nonspatial_summary <- list(nonspatial_model$summary.fixed)
+  pred.site.names <- as.character(unique(xy$Site))
 }
 
 
@@ -120,7 +127,6 @@ ggplot(fit.df, aes(x = detection_ratio, y = `effron's R-squared`, group = model,
   geom_smooth(method = "lm")+
   facet_wrap(~model, nc = 1, scales = "free")
 fit.df[fit.df$detection_ratio > 0.1,]
-dev.off()
 
 #Variation of coefficients
 summaries <- data.frame(rbind(do.call(rbind, nonspatial_summary), do.call(rbind, spatial_summary)))
@@ -150,7 +156,6 @@ segments_CC$SC <- NULL
 segs <- segments_CC
 segs_cent <- geosphere::centroid(segs)
 segs <- cbind(long = segs_cent[,1], lat = segs_cent[,2], data.frame(segs))
-
 segments_df <- cbind(data.frame(segs_cent), xy, data.frame(segments_CC))
 names(segments_df)[c(1,2)] <- c("long", "lat") 
 
@@ -163,7 +168,7 @@ spatial_dep_spatial_m <- ncf::correlog(x = spatial_dep$long, y = spatial_dep$lat
 
 ### FUNCTION ###
 # Plot a Map of residuals, observations or predictions..
-map_site <- function(df = segments_df, p = "spatial_pred", o = "obs", plot.what = "r", filter = NA, title = NA, interpolate = T, buffer.it = T, buffer.spdf = buffer){
+map_site <- function(df = segments_df, p = "spatial_pred", o = "obs", plot.what = "r", filter = NA, title = NA, interpolate = T, buffer.it = T, buffer.spdf = buffer, lower = T){
   
   #use unique names for plotting
   df <- df[,match(c("long","lat", "Site", p,o, "HT", "Block"), names(df))]
@@ -224,7 +229,7 @@ map_site <- function(df = segments_df, p = "spatial_pred", o = "obs", plot.what 
   
     
   #print("create hist")
-  if(plot.what == "r"){
+  if(plot.what == "r" & lower){
     gg_resid_hist <- 
       ggplot()+
       geom_histogram(data = df, aes(x = input, col = o, fill = o), bins = 100)+
@@ -251,20 +256,22 @@ map_site <- function(df = segments_df, p = "spatial_pred", o = "obs", plot.what 
                                layout_matrix = matrix(c(1,1,1,2,1,1,1,3), nc = 2),
                                top = title)
   }else{
-    
-    gg_hist <- 
-      ggplot(data = df, aes(input, fill = HT, color = HT, alpha = .5))+
+    if(lower){
+      gg_hist <- 
+        ggplot(data = df, aes(input, fill = HT, color = HT, alpha = .5))+
         geom_density()+
         guides(fill = guide_legend(title = "Observed"), alpha = F, col = F)+
         scale_fill_manual(values = c("firebrick", "turquoise", "white"))+
         facet_wrap(~Block, scales = "free")
-
+      
+      
+      gg_map <- 
+        gridExtra::grid.arrange(gg_map, 
+                                gg_hist,
+                                layout_matrix = matrix(c(1,1,1,2,2,1,1,1,2,2), nc = 2),
+                                top = title)
+    }
     
-    gg_map <- 
-      gridExtra::grid.arrange(gg_map, 
-                              gg_hist,
-                              layout_matrix = matrix(c(1,1,1,2,2,1,1,1,2,2), nc = 2),
-                              top = title)
 
   }
   return(gg_map)
@@ -360,3 +367,18 @@ gg.xy <- reshape2::melt(gg.xy, id.vars = c("nonspatial_pred", "spatial_pred", "o
   }
   sample.fix  
 
+  
+  
+## ggradar
+
+xy_radar <- read.csv("Z:/modelling/yxtable.csv")  
+rm(list = ls(pattern = "radar_"))  
+for(Site in c("BWA_NOR", "KEN_LAI", "KEN_TSV", "XWA_TBC", "ZWE_MAT", "ZWE_ZV", "ZWE_SELV")) assign(paste0("radar_", Site), ggiraphExtra::ggRadar(data = xy_radar[xy_radar$Site == Site, c(splines, "HT", "Site")], aes(color = HT), scales = "free", rescale = T, interactive = T))
++ggtitle(Site)+theme(legend.position = "none"))
+
+ggiraphExtra::ggRadar(data = xy_radar[xy_radar$Site == Site, c(splines, "HT")], aes(color = HT), scales = "free", rescale = T, interactive = T)+ggtitle(Site)+theme(legend.position = "none")
+
+
+do.call(gridExtra::grid.arrange, mget(ls(pattern = "radar_")))
+radar_ZWE_MAT
+?ggRadar

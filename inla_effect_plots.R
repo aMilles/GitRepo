@@ -4,6 +4,8 @@ library(gridExtra)
 library(parallel)
 library(foreach)
 library(doSNOW)
+library(doParallel)
+library(gridExtra)
 
 #read Model output from nemo
 #load("Z:/NEMO_out/output_all_complex_binomial_nonspatial_spatial_5km_splines.RData")
@@ -12,11 +14,12 @@ library(doSNOW)
 #load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_xval_LOSO_5km_splines.RData")
 #load("Z:/NEMO_out/output_ZWE_BWA_complex_binomial_nonspatial_spatial_5km_splines.RData")
 #load("Z:/NEMO_out/output_BWA_NOR_KEN_LAI_KEN_TSV_XWA_TBC_ZWE_MAT_ZWE_ZV_ZWE_SELV_complex_binomial_nonspatial_spatial_5km_splines.RData")
-load("Z:/NEMO_out/output_ZWE_BWA_complex_binomial_nonspatial_spatial_5km_splines.RData")
+#load("Z:/NEMO_out/output_ZWE_BWA_complex_binomial_nonspatial_spatial_5km_splines.RData")
 #load("Z:/NEMO_out/output_all_complex_binomial_nonspatial_spatial_5km_splines.RData")
 #load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_5km_splines.RData")
-
-
+#load("Z:/NEMO_out/output_BWA_NOR_KEN_LAI_KEN_TSV_XWA_TBC_ZWE_MAT_ZWE_ZV_ZWE_SELV_complex_binomial_nonspatial_spatial_5km_splines_prec1e-04.RData")
+#load("Z:/NEMO_out/output_ZWE_complex_binomial_nonspatial_spatial_5km_splines_prec1e-04.RData")
+load("Z:/NEMO_out/output_BWA_NOR_KEN_LAI_KEN_TSV_XWA_TBC_ZWE_MAT_ZWE_ZV_ZWE_SELV_complex_binomial_nonspatial_spatial_5km_splines_prec1e-04.RData")
 if(is.numeric(xy$ID)) xy$ID <- segments_new$ID
 
 #select one model
@@ -29,6 +32,8 @@ rm(list = ls()[which(!ls() %in% c("that.model", "xy", "splines", "n.knots", "f",
 source("Z:/GitRepo/function_file.R")
 f <- stringi::stri_replace_all_fixed(f, "\n", "")
 #get a vector of predictors used for the model
+f <- stringi::stri_replace_all_regex(f, " ", "")
+f <- stringi::stri_replace_all_fixed(f, "+", " + ")
 preds <- stringi::stri_remove_empty(stringi::stri_replace_all_fixed(strsplit(f, "+ ")[[1]], "+", ""))
 
 #read the transformation and scale sheet
@@ -127,20 +132,19 @@ for(predictor in selection) assign(
   marginal.plot(
     marg.vars = seqs[, names(seqs) %in% c(final.preds)], 
     effect.of = predictor, 
-    model = that.model, 
-    posterior.samples = 20, 
+    posterior.dist = dist, 
     original.df = unscaled_df,
     scaled.df = xy,
     interactions = interactions, 
     prob = c(0.025, 0.25, 0.5, 0.75, 0.975),
     original.seqs = original.seqs,
-    n.cores = 1,
     silent = F,
     formula = f))
 
-
+pdf(paste0("Z:/Plots/effect_plots/marginals/", tools::file_path_sans_ext(output_name), ".pdf"), onefile = T)
 for(predictor in selection){
   out <- get(predictor)
+  names(out[[3]]) <- "pred"
   effect.plot(quantiles.i = out[[1]],
               quantiles.o = out[[2]],
               df = out[[3]],
@@ -148,12 +152,11 @@ for(predictor in selection){
               rug = F,
               with.lines = F)
 }
+dev.off()
 
 
+summary(that.model)
 
-sample.fixed.params(model = that.model, nsample = 10)
-
-as.formula(paste0("~", paste0(interactions, collapse = "+")))
 #### SIMPLE ####
 gg.xy <- xy
 gg.xy[,selection] <- unscaled_df[,selection]

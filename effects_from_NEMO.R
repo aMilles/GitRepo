@@ -1,6 +1,6 @@
 library(ggplot2)
 library(gridExtra)
-load("Z:/NEMO_out/marginals_all_complex_binomial_nonspatial_spatial_5km_splines.RData")
+load("Z:/NEMO_out/marginals_all_complex_binomial_nonspatial_spatial_5km_splines_prec1e-04.RData")
 
 source("Z:/GitRepo/function_file.R")
 for(i in seq(length(out)/4) - 1){
@@ -18,4 +18,3 @@ for(i in seq(length(out)/4) - 1){
 
 
 
-f

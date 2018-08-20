@@ -57,26 +57,37 @@ HT <- GEC_test[,c("sg_nr", "obsrvt_")]
 
 agg_HT <- data.frame(ID = unique(HT$sg_nr), HT = NA)
 
+both <- 0 
 for(ID in unique(HT$sg_nr)){
   types <- as.character(HT$obsrvt_[HT$sg_nr == ID])
   
   if(all.equal.character("bh", types) == T){
     agg_HT[agg_HT$ID == ID, 2] <- "bh"
   }else{
-    agg_HT[agg_HT$ID == ID, 2] <- "mh"
+    if(all(c("bh","mh") %in% types)){
+     agg_HT[agg_HT$ID == ID, 2] <- "both"
+    }else{
+     agg_HT[agg_HT$ID == ID, 2] <- "mh"
+    } 
+
   }     
 }
 HT <- agg_HT
-
-COUNT <- GEC_test[,c("sg_nr", "pht_cr_")]
+summary(as.factor(HT$HT))
+OBS <- COUNT <- GEC_test[,c("sg_nr", "pht_cr_")]
 COUNT <- aggregate(COUNT$pht_cr_, by = list(COUNT$sg_nr), FUN = function(x) sum(x, na.rm = T))
-names(COUNT)[1] <- "ID"
-
+OBS <- aggregate(as.numeric(OBS$pht_cr_> 0), by = list(OBS$sg_nr), FUN = function(x) sum(x, na.rm = T))
+names(OBS)[1] <- names(COUNT)[1] <- "ID"
+names(OBS)[2] <- "weight"
 COUNT <- base::merge(IDS, COUNT, by = "ID", all.x = T)
+OBS <- base::merge(IDS, OBS, by = "ID", all.x = T)
 COUNT$x[is.na(COUNT$x)] <- 0
 
 HT <- base::merge(IDS, HT, by = "ID", all.x = T)
 
-
-write.csv(HT[, 2:3], file = "Z:/predictors/HT.csv")
-write.csv(COUNT[, 2:3], file = "Z:/predictors/COUNT.csv")
+summary(HT)
+summary(OBS)
+summary(COUNT)
+write.csv(OBS, file = "Z:/predictors/REPS.csv")
+write.csv(HT, file = "Z:/predictors/HT.csv")
+write.csv(COUNT, file = "Z:/predictors/COUNT.csv")

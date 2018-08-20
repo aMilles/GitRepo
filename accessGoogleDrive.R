@@ -67,7 +67,7 @@ all.preds <- all.preds[match(as.character(segments$ID), as.character(all.preds$I
 all.preds$Site <- segments$SC
 all.preds$Country <- segments$CC
 all.preds$Transect <- unlist(lapply(strsplit(as.character(all.preds$ID), "p"), function(x) x[1]))
-
+all.preds$REPS[is.na(all.preds$REPS)] <- 0
 
 all.preds$HT <- as.character(all.preds$HT)
 all.preds$HT <- ifelse(is.na(all.preds$HT), "none", all.preds$HT)
@@ -87,9 +87,11 @@ write.csv(all.preds, "Z:/modelling/yxtable.csv")
 transformed <- all.preds
 
 bc_values <- NULL
-for(col in names(all.preds)[which(!names(all.preds) %in% c("ID", "CC", "COUNT", "HT", "PA", "Site", "Transect", "Country"))]){
+pdf(paste0("Z:/Plots/transformation_scaling/",as.Date(Sys.time()),"_transform.pdf"), onefile = T, paper = "a4")
+for(col in names(all.preds)[which(!names(all.preds) %in% c("REPS", "ID", "CC", "COUNT", "HT", "PA", "Site", "Transect", "Country"))]){
   cov <- all.preds[,col]
-  cov <- cov + abs(min(cov)) + 1e-64
+  if(min(cov) <= 0) cov <- cov + abs(min(cov))
+  cov <- cov + (min(cov[cov > 0]) / 2)
   par(mfrow = c(1,1))
   #hist(cov, main = col)
   fm <- lm(cov ~ 1)
@@ -115,14 +117,16 @@ for(col in names(all.preds)[which(!names(all.preds) %in% c("ID", "CC", "COUNT", 
   qqline(all.preds[,col])
   hist(all.preds[,col])
 }
-
+dev.off()
 #save and check transforming parameters - plots should look the same
 
 transform_sheet <- 
-data.frame(name = names(all.preds)[which(!names(all.preds) %in% c("ID", "CC", "COUNT", "HT", "PA", "Site", "Transect", "Country"))],
+data.frame(name = names(all.preds)[which(!names(all.preds) %in% c("REPS", "ID", "CC", "COUNT", "HT", "PA", "Site", "Transect", "Country"))],
            value = bc_values, shift = 0)
 
-for(pred in names(all.preds)[which(!names(all.preds) %in% c("ID", "CC", "COUNT", "HT", "PA", "Site", "Transect", "Country"))]){
+
+
+for(pred in names(all.preds)[which(!names(all.preds) %in% c("REPS", "ID", "CC", "COUNT", "HT", "PA", "Site", "Transect", "Country"))]){
   orig <- all.preds[, pred]
   
   bt_value = transform_sheet$value[which(transform_sheet$name == pred)]
@@ -135,7 +139,6 @@ for(pred in names(all.preds)[which(!names(all.preds) %in% c("ID", "CC", "COUNT",
   hist((bt + abs(min(all.preds[,pred])) + 1e-64 + shift), main = paste0("backtransformed ", pred))
 } 
 
-
 write.csv(transform_sheet, "Z:/modelling/transform_sheet.csv")
 write.csv(transformed, "Z:/modelling/yxtable_transformed.csv")
 
@@ -145,7 +148,7 @@ scale_transformed <- transformed
 centers <- NULL
 scales <- NULL
 names <- NULL
-for(col in which(!names(transformed) %in% c("ID", "CC", "HT", "PA", "COUNT", "Country", "Transect", "Site"))){
+for(col in which(!names(transformed) %in% c("REPS", "ID", "CC", "HT", "PA", "COUNT", "Country", "Transect", "Site"))){
   scale_transformed[,col] <- scale(transformed[,col])
   centers <- append(centers, attr(scale_transformed[,col], "scaled:center"))
   scales <- append(scales, attr(scale_transformed[,col], "scaled:scale"))
@@ -154,9 +157,9 @@ for(col in which(!names(transformed) %in% c("ID", "CC", "HT", "PA", "COUNT", "Co
 
 #save and check scaling parameters - plots should look the same
 
-scale_sheet <- data.frame("center" = centers, "scale" = scales, "name" = names(all.preds)[which(!names(all.preds) %in% c("ID", "CC", "COUNT", "HT", "PA", "Site", "Transect", "Country"))])
+scale_sheet <- data.frame("center" = centers, "scale" = scales, "name" = names(all.preds)[which(!names(all.preds) %in% c("REPS", "ID", "CC", "COUNT", "HT", "PA", "Site", "Transect", "Country"))])
 
-for(pred in names(all.preds)[which(!names(all.preds) %in% c("ID", "CC", "COUNT", "HT", "PA", "Site", "Transect", "Country"))]){
+for(pred in names(all.preds)[which(!names(all.preds) %in% c("REPS", "ID", "CC", "COUNT", "HT", "PA", "Site", "Transect", "Country"))]){
   orig <- transformed[, pred]
   scaled <- scale_transformed[, pred]
   
@@ -174,7 +177,7 @@ write.csv(scale_sheet, "Z:/modelling/scale_sheet.csv")
 
 #check how the scaled, transformed values are distributed in comparison to the original values
 par(mfrow = c(2,2))
-for(i in which(!names(transformed) %in% c("ID", "CC", "HT", "PA", "COUNT", "Country", "Transect", "Site"))){
+for(i in which(!names(transformed) %in% c("REPS", "ID", "CC", "HT", "PA", "COUNT", "Country", "Transect", "Site"))){
   hist(scale_transformed[,i], main = names(scale_transformed)[i], breaks = 1000)
   hist(all.preds[,i], main = names(scale_transformed)[i], breaks = 1000)
 }
@@ -187,12 +190,12 @@ source("Z:/GitRepo/modified_cormat.R")
 
 #check for correlation
 #correlation between values before and after transforamtion + scaling, HD old and HD new are highly NEGATIVELY correlated (just to keep it in mind)
-rquery.cormat.spearman(cbind(all.preds[, which(!names(scale_transformed) %in% c("ID", "CC", "HT", "PA", "COUNT", "Country", "Transect", "Site"))],
-                             scale_transformed[, which(!names(scale_transformed) %in% c("ID", "CC", "HT", "PA", "COUNT", "Country", "Transect", "Site"))]))$r
+rquery.cormat.spearman(cbind(all.preds[, which(!names(scale_transformed) %in% c("REPS", "ID", "CC", "HT", "PA", "COUNT", "Country", "Transect", "Site"))],
+                             scale_transformed[, which(!names(scale_transformed) %in% c("REPS", "ID", "CC", "HT", "PA", "COUNT", "Country", "Transect", "Site"))]))$r
 
 
 #correlation between transformed + scaled values
-spearman <- rquery.cormat.spearman(scale_transformed[, which(!names(scale_transformed) %in% c("ID", "CC", "HT", "PA", "COUNT", "Country", "Transect", "Site"))], graphType = "heatmap")$r
+spearman <- rquery.cormat.spearman(scale_transformed[, which(!names(scale_transformed) %in% c("REPS", "ID", "CC", "HT", "PA", "COUNT", "Country", "Transect", "Site"))], graphType = "heatmap")$r
 
 spearman <- data.frame(apply(spearman, 1, function(x) as.numeric(as.character(x))))
 cornames <- names(spearman) 
