@@ -221,41 +221,95 @@ conditional.plot <- function(cond.vars, effect.of, model, posterior.samples, ori
 
 
 
-marginal.plot <- function(marg.vars, effect.of, posterior.dist, original.df, scaled.df, rug = F, splines, interactions, prob, fix.fun = function(x) median(x), original.seqs = original.seqs, silent = F, formula){
+marginal.quantiles <- function(marg.vars, effect.of, posterior.dist, original.df, scaled.df, interactions, original.seqs, silent = F, formula, interact = T){
   
   if(!silent) print('initialize matrix')
   keep.dynamic <- which(substring(effect.of,1,2) == substring(names(marg.vars),1,2) |
                           substring(effect.of,1,2) == substring(names(marg.vars),4,5))
-
+  
   marg.vars.ss <- as.matrix(marg.vars[, keep.dynamic], nc = length(keep.dynamic))
-
+  
   rownames(marg.vars.ss) <- NULL
   ext.marg <- as.matrix(marg.vars.ss[rep(seq(nrow(marg.vars.ss)), each = nrow(scaled.df)),], nc = length(keep.dynamic))
   colnames(ext.marg) <- names(marg.vars[keep.dynamic])
-
+  
   row.names(scaled.df) <- NULL
   ext.df <- scaled.df[rep(seq(nrow(scaled.df)), nrow(marg.vars.ss)),]
   ext.df[,na.omit(match(colnames(ext.marg), colnames(ext.df)))] <- NULL
   ext.df <- cbind(ext.df, ext.marg)
-  ext.df <- model.matrix(as.formula(paste0("~", formula)), ext.df)
   
-
-  if(!silent) print('calculate probabilities')
+  interactor.hist <- data.frame(pred = NA, value = NA)
   
-  strt<-Sys.time()
+  if(interact){
+    interacting <- stringi::stri_replace_all_regex(interactions[stringi::stri_count_regex(interactions, effect.of) > 0], paste0(":", effect.of), "")
+    interacting <- interacting[stringi::stri_count_regex(interacting, ":") < 1]
+    print(interacting)
+    if(length(interacting) > 0){
+      save.names <- colnames(ext.df)
+      ext.df <- data.frame(ext.df)
+      
+      for(interaction in interacting){
+        ic.all <- marg.vars[,interaction]
+        if(is.factor(ic.all)){
+          unscaled.ic <- ic <- levels(ic.all)
+        }else{
+          ic <- ic.all[c(5, 95)]
+          unscaled.ic <- original.seqs[c(5, 95),interaction]  
+        }
+        
+        for(i in seq(length(ic))){
+          if(!is.factor(ic.all)){
+            value <- ic[i]
+          }else{
+            value <- factor(ic[i], levels = levels(ic.all))
+          }
+          hist.value <- unscaled.ic[i]
+          
+          ic.df <- ext.df
+          backup.values <- ic.df[,interaction]
+          ic.df[,interaction] <- value
+          names(ic.df) <- save.names
+          ic.df <- model.matrix(as.formula(paste0("~", formula)), ic.df)
+          
+          if(interaction %in% colnames(ic.df)) ic.df[,match(interaction, colnames(ic.df))] <- backup.values
+          
+          
+          strt<-Sys.time()
+          out <- foreach(i =  seq(nrow(marg.vars)), .combine = "rbind", .export = c("prob")) %do% {
+            this.rows <- seq(nrow(scaled.df)) + (nrow(scaled.df) * (i - 1))
+            dprobs <- invlogit(ic.df[this.rows,] %*% t(as.matrix(posterior.dist)))
+            
+            return(quantile(dprobs, probs = c(0.025, 0.25, 0.5, 0.75, 0.975), na.rm = T))
+          }
+          print(Sys.time() - strt)
+          print(nrow(out))
+          interactor.hist <- rbind(interactor.hist, data.frame(pred = interaction, value = hist.value))
+          assign(paste0("interactvalue_", value), out)
+          row.names(out) <- NULL
+          print(ls(pattern = "interactvalue_"))
+        }
+        assign(paste0("interact_", interaction), do.call(rbind, mget(ls(pattern = "interactvalue_"))))
+        rm(list = ls(pattern = "interactvalue_"))
+      }
+      out <- do.call(rbind, mget(ls(pattern = "interact_")))
+      interactor.hist <- interactor.hist[-1,]
+    }
+  }
   
-  out <- foreach(i =  seq(nrow(marg.vars)), .combine = "rbind", .export = c("prob")) %dopar% {
+  if(!interact){
+    ext.df <- model.matrix(as.formula(paste0("~", formula)), ext.df)
+    if(!silent) print('calculate probabilities')
+    strt<-Sys.time()
     
-    this.rows <- seq(nrow(scaled.df)) + (nrow(scaled.df) * (i - 1))
-    if(!silent) print(range(this.rows))
-    
-    dprobs <- invlogit(ext.df[this.rows,] %*% t(as.matrix(posterior.dist)))
-    
-    return(quantile(dprobs, probs = c(0.025, 0.25, 0.5, 0.75, 0.975), na.rm = T))
-  } 
-   
- 
-  print(Sys.time() - strt)
+    out <- foreach(i =  seq(nrow(marg.vars) * nrow(interactor.hist)), .combine = "rbind", .export = c("prob")) %dopar% {
+      this.rows <- seq(nrow(scaled.df)) + (nrow(scaled.df) * (i - 1))
+      if(!silent) print(range(this.rows))
+      dprobs <- invlogit(ext.df[this.rows,] %*% t(as.matrix(posterior.dist)))
+      return(quantile(dprobs, probs = c(0.025, 0.25, 0.5, 0.75, 0.975), na.rm = T))
+    } 
+    print(Sys.time() - strt)
+  }
+  
   
   gg.out.q.inner <- data.frame(out[,2:4])
   names(gg.out.q.inner)[1:3] <- c("lower", "mid", "upper")
@@ -263,10 +317,8 @@ marginal.plot <- function(marg.vars, effect.of, posterior.dist, original.df, sca
   names(gg.out.q.outer)[1:2] <- c("lower", "upper")
   gg.out.q.outer$pred <- gg.out.q.inner$pred <- original.seqs[,effect.of]
   original.df$pred <- original.df[,effect.of]
-  
-  return(list(gg.out.q.inner, gg.out.q.outer, data.frame(original.df$pred), effect.of))
+  return(list(gg.out.q.inner, gg.out.q.outer, data.frame(original.df$pred), effect.of, interactor.hist))
 }
-
   
 
 effect.plot <- function(quantiles.i, quantiles.o, lines, df, rug, with.lines, effect.of){

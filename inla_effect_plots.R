@@ -19,7 +19,7 @@ library(gridExtra)
 #load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_5km_splines.RData")
 #load("Z:/NEMO_out/output_BWA_NOR_KEN_LAI_KEN_TSV_XWA_TBC_ZWE_MAT_ZWE_ZV_ZWE_SELV_complex_binomial_nonspatial_spatial_5km_splines_prec1e-04.RData")
 #load("Z:/NEMO_out/output_ZWE_complex_binomial_nonspatial_spatial_5km_splines_prec1e-04.RData")
-load("Z:/NEMO_out/output_BWA_NOR_KEN_LAI_KEN_TSV_XWA_TBC_ZWE_MAT_ZWE_ZV_ZWE_SELV_complex_binomial_nonspatial_spatial_5km_splines_prec1e-04.RData")
+load("Z:/NEMO_out/output_ZWE_complex_binomial_nonspatial_spatial_5km_splines_prec1e-04.RData")
 if(is.numeric(xy$ID)) xy$ID <- segments_new$ID
 
 #select one model
@@ -34,7 +34,7 @@ f <- stringi::stri_replace_all_fixed(f, "\n", "")
 #get a vector of predictors used for the model
 f <- stringi::stri_replace_all_regex(f, " ", "")
 f <- stringi::stri_replace_all_fixed(f, "+", " + ")
-preds <- stringi::stri_remove_empty(stringi::stri_replace_all_fixed(strsplit(f, "+ ")[[1]], "+", ""))
+preds <- as.vector(na.omit(stringi::stri_replace_all_fixed(strsplit(f, "+ ")[[1]], "+", NA)))
 
 #read the transformation and scale sheet
 tf_sheet <- read.csv("Z:/modelling/transform_sheet.csv", stringsAsFactors = F)
@@ -53,9 +53,9 @@ if(nrow(unscaled_df) != nrow(xy)) unscaled_df <- unscaled_df[as.character(unscal
   mins <- apply(unscaled_df[,tf_sheet$name], 2, min)
   maxs <- apply(unscaled_df[,tf_sheet$name], 2, max)
   #sample the 0 - 100 % quantile of the predictor ranges with length 100 
-  #original.seqs <- seqs <- data.frame(apply(unscaled_df[,tf_sheet$name], 2, quantile, probs = seq(0,1,length = 100)))
+  original.seqs <- seqs <- data.frame(apply(unscaled_df[,tf_sheet$name], 2, quantile, probs = seq(0,1,length = 100)))
   
-  original.seqs <- seqs <- data.frame(apply(rbind(mins, maxs), 2, function(x) seq(x[1], x[2], length = 100)))
+  #original.seqs <- seqs <- data.frame(apply(rbind(mins, maxs), 2, function(x) seq(x[1], x[2], length = 100)))
   
   #transform and scale the quantiles of the unscaled dataset
   for(i in seq(nrow(tf_sheet))){
@@ -87,42 +87,59 @@ if(nrow(unscaled_df) != nrow(xy)) unscaled_df <- unscaled_df[as.character(unscal
   
   interactions <- preds[as.logical(stringi::stri_count_fixed(preds, ":"))]
   
-  for(interaction in preds[as.logical(stringi::stri_count_fixed(preds, ":"))]){
-    seqs[, interaction] <- model.matrix(as.formula(paste0("~", interaction)), seqs)[,2]
-  }
+  # for(interaction in preds[as.logical(stringi::stri_count_fixed(preds, ":"))]){
+  #   seqs[, interaction] <- model.matrix(as.formula(paste0("~", interaction)), seqs)[,2]
+  # }
   seqs <- cbind("(Intercept)" = 1, seqs)
 }
 
+for(factors in names(Filter(is.factor, seqs))){
+  factor.levels <- levels(seqs[,factors])
+  seqs[,factors] <- as.factor(sort(rep(factor.levels, length = nrow(seqs))))
+  original.seqs[,factors] <- as.factor(sort(rep(factor.levels, length = nrow(seqs))))
+}
 
 #GENERATE EFFECT PLOTS
 selection <- unique(substring(names(seqs)[names(seqs) %in% preds & !names(seqs) %in% missing.preds & !names(seqs) %in% interactions],1,2))
 selection[selection == "NA"] <- "NA."
 
-dist <- sample.fixed.params(that.model, 10)
-
-source("Z:/GitRepo/function_file.R")
-
-check <- marginal.plot(
-  marg.vars = seqs[, names(seqs) %in% c(final.preds)], 
-  effect.of = "PI", 
-  posterior.dist = dist, 
-  original.df = unscaled_df,
-  scaled.df = xy,
-  interactions = interactions, 
-  prob = c(0.025, 0.25, 0.5, 0.75, 0.975),
-  original.seqs = original.seqs,
-  silent = F,
-  formula = f)
-
-out <- check
-df <- out[[3]]
-names(df) <- "pred"
-effect.plot(quantiles.i = out[[1]],
-            quantiles.o = out[[2]],
-            df = df,
-            effect.of = out[[4]],
-            rug = F,
-            with.lines = F)
+f
+{
+  source("Z:/GitRepo/function_file.R")
+  dist <- sample.fixed.params(that.model, 10)
+  
+  check <- marginal.quantiles(
+    marg.vars = seqs, 
+    effect.of = "WA", 
+    posterior.dist = dist, 
+    original.df = unscaled_df,
+    scaled.df = xy,
+    interactions = interactions, 
+    original.seqs = original.seqs,
+    silent = F,
+    formula = f,
+    interact = T)
+  
+  
+  out <- check
+  df <- out[[3]]
+  names(df) <- "pred"
+  comb.out <- cbind(out[[1]][,-4], out[[2]])
+  names(comb.out) <- c("lower.in", "mid", "upper.in", "lower.out", "upper.out", "pred")
+  
+  comb.out <- data.frame(comb.out, 
+                         interactor = rep(out[[5]]$pred, each = 100), 
+                         interactor.value = rep(paste0(out[[5]]$pred, "_", signif(as.numeric(out[[5]]$value), 3)), each = 100))
+  
+  ggplot(comb.out, aes(x = pred, group = interactor.value, fill = interactor.value))+
+    geom_ribbon(aes(ymin = lower.out, ymax = upper.out), alpha = .4)+
+    geom_ribbon(aes(ymin = lower.in, ymax = upper.in), alpha = .8)+
+    geom_line(aes(y = mid))+
+    facet_wrap(~ interactor, scales = "free")+
+    xlab(out[[4]])+
+    ylab("Habitat Suitability")+
+    theme_classic()
+}
 
 samples <- sample(nrow(unscaled_df), nrow(unscaled_df), replace = F)
 #samples <- sample(nrow(unscaled_df), 10, replace = F)

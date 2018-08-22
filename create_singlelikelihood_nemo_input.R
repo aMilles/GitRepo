@@ -11,13 +11,13 @@ xy <- read.csv("Z:/modelling/yxtable_scaled_transformed.csv")[,-c(1)]
 transformed = T
 model.type = "complex"
 model.family = "binomial"
-selection = c("BWA_NOR", "KEN_LAI", "KEN_TSV", "XWA_TBC", "ZWE_MAT", "ZWE_ZV", "ZWE_SELV") #ISO3 Country Code or "all" if non selection should be made, Site Codes if sites are selected ("ZWE_MAT") c("BWA_NOR", "KEN_LAI", "KEN_TSV", "XWA_TBC", "ZWE_MAT", "ZWE_ZV", "ZWE_SELV")
-selection.level = "Site" #"Country" or "Site"
+selection = c("ZWE", "BWA", "KEN") #ISO3 Country Code or "all" if non selection should be made, Site Codes if sites are selected ("ZWE_MAT") c("BWA_NOR", "KEN_LAI", "KEN_TSV", "XWA_TBC", "ZWE_MAT", "ZWE_ZV", "ZWE_SELV")
+selection.level = "Country" #"Country" or "Site"
 nb_dist = 5000 #maximum distance considered as a neighbor [m]
 xval = T #prepare data for cross validation
 xval.type = "KOSI" #LSO = leave some out, LOSO = leave one site out, KOSI = keep one site in
 LSO.folds = 10 #number of folds
-splines = c("WA", "VD", "AI", "LD", "TV", "NA.") #transform these predictors to splines c("AI", "LD", "WA", "VD", "PI", "TD", "NA.")
+splines = NA #transform these predictors to splines c("WA", "VD", "AI", "LD", "TV", "NA.")
 n.knots = 2 #number of knots per spline per predictor
 ridge = F #ridge regression
 precision = 1e-4 #1e-4 is default
@@ -94,13 +94,13 @@ if(!all(is.na(splines))){
 xy$Block <- NA
 if(xval){
   if(xval.type %in% c("KOSI", "LOSO")){
-    for(Site in as.character(unique(xy$Site))){
-      xy_site <- xy
-      if(xval.type == "LOSO") which.na <- xy_site$Site == Site
-      if(xval.type == "KOSI") which.na <- xy_site$Site != Site
-      xy_site[which.na, "obs"] <- NA
-      xy$Block[which.na] <- Site
-      assign(paste0("xy_without_", Site), xy_site)
+    for(Block in as.character(unique(xy[,selection.level]))){
+      xy_Block <- xy
+      if(xval.type == "LOSO") which.na <- xy[,selection.level] == Block
+      if(xval.type == "KOSI") which.na <- xy[,selection.level] != Block
+      xy_Block[which.na, "obs"] <- NA
+      xy$Block[which.na] <- Block
+      assign(paste0("xy_without_", Block), xy_Block)
     }
   }
   if(xval.type == "LSO"){

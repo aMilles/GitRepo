@@ -19,7 +19,6 @@ if(!"segments" %in% ls()) segments <- readOGR("Z:/GEC/segments_GEE.shp")
 if(!"buffer" %in% ls()) buffer <- readOGR("Z:/GEC/buffered_segments.shp")
 
 
-
 #load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_xval_5km.RData")
 #load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_xval_LSO_5km.RData")
 #load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_xval_LOSO_5km.RData")
@@ -36,11 +35,10 @@ if(!"buffer" %in% ls()) buffer <- readOGR("Z:/GEC/buffered_segments.shp")
 #load("Z:/NEMO_out/output_ZWE_complex_binomial_nonspatial_spatial_5km_splines_prec1e-04.RData")
 #load("Z:/NEMO_out/output_ZWE_complex_binomial_nonspatial_spatial_5km_splines_prec1e-04.RData")
 #load("Z:/NEMO_out/output_BWA_NOR_KEN_LAI_KEN_TSV_XWA_TBC_ZWE_MAT_ZWE_ZV_ZWE_SELV_complex_binomial_nonspatial_spatial_5km_splines_prec1e-04.RData")
-load("Z:/NEMO_out/output_ZWE_complex_binomial_nonspatial_spatial_5km_splines_prec1e-04.RData")
-
+#load("Z:/NEMO_out/output_ZWE_complex_binomial_nonspatial_spatial_5km_splines_prec1e-04.RData")
+load("Z:/NEMO_out/output_ZWE_complex_binomial_nonspatial_spatial_xval_KOSI_5km_prec1e-04.RData")
 
 xy_backup <- xy
-
 #replace scaled and transformed xy values with original values
 xy2 <- read.csv("Z:/modelling/yxtable.csv")[,-c(1)]
 unique(xy2$Site)
@@ -55,13 +53,14 @@ if(model.family %in% c("binomial", "zeroinflated.binomial.0", "zeroinflated.bino
 
 
 if(xval){
-  identifier <- ifelse(xval.type %in% c("Site", "LOSO"), 4, 3)
+  identifier <- ifelse(xval.type %in% c("Site", "LOSO", "KOSI"), 4, 3)
   spatial_summary <- nonspatial_summary <- vector("list", length(ls(pattern = "_nonspatial_model$")))
   pred.site.names <- NULL
   for(model in ls(pattern = "_nonspatial_model$")){
     pred.site.name <- paste(strsplit(model, "_")[[1]][c(1:identifier)], collapse = "_")
     pred.site <- get(pred.site.name)
     where.na <- which(is.na(pred.site$obs))
+    if(xval.type == "KOSI") where.na <- -where.na
     m <- get(model)
     nonspatial_summary[[which(ls(pattern = "_nonspatial_model$") == model)]] <- rbind(summary(m)$fixed[,-7])
     xy[, paste0("nonspatial_pred_", pred.site.name)] <- link.function(m$summary.linear.predictor$`0.5quant`)
@@ -72,6 +71,7 @@ if(xval){
     pred.site.name <- paste(strsplit(model, "_")[[1]][c(1:identifier)], collapse = "_")
     pred.site <- get(pred.site.name)
     where.na <- which(is.na(pred.site$obs))
+    if(xval.type == "KOSI") where.na <- -where.na
     m <- get(model)
     spatial_summary[[which(ls(pattern = "_spatial_model$") == model)]] <- rbind(summary(m)$fixed[,-7])
     xy[, paste0("spatial_pred_", pred.site.name)] <- link.function(m$summary.linear.predictor$`0.5quant`)
@@ -122,10 +122,9 @@ for(i in c("spatial_pred", "nonspatial_pred")){
 
 fit.df <- data.frame(matrix(out, nc = 2, byrow = T), model = rep(c("spatial", "non-spatial"), each = length(unique(xy$Site))), site = unique(xy$Site))
 names(fit.df)[1:2] <- c("detection_ratio", "effron's R-squared")
-ggplot(fit.df, aes(x = detection_ratio, y = `effron's R-squared`, group = model, col = site))+
+ggplot(fit.df, aes(x = detection_ratio, y = `effron's R-squared`, group = model, col = site, fill = model, shape = model, color = model))+
   geom_point(size = 5)+
-  geom_smooth(method = "lm")+
-  facet_wrap(~model, nc = 1, scales = "free")
+  geom_smooth(method = "lm", se = F)
 fit.df[fit.df$detection_ratio > 0.1,]
 
 #Variation of coefficients
@@ -136,14 +135,15 @@ predictors <- data.frame("predictor" = rep(row.names(nonspatial_summary[[1]]), l
            "value" = summaries$X0.5quant,
            "lower" = summaries$X0.975quant,
            "spatial" = rep(c("non-spatial", "spatial"), each = nrow(spatial_summary[[1]]) * length(ls(pattern = "nonspatial_model$"))),
-           "Site" = rep(pred.site.names, each = nrow(spatial_summary[[1]])*2))
+           "Site" = rep(pred.site.names, each = nrow(spatial_summary[[1]])))
 
 (summary.plot <- 
   ggplot(predictors, aes(x = predictor, y = value, col = Site, ymax = upper, ymin = lower))+
     geom_point()+
     geom_errorbar()+
     facet_wrap(~spatial, nc = 1)+
-    ylab("coefficient estimate"))
+    ylab("coefficient estimate")+
+    ylim(c(-2, 2)))
 
 # Spatial analysis
 #add observations and predictions to the segments
@@ -373,12 +373,7 @@ gg.xy <- reshape2::melt(gg.xy, id.vars = c("nonspatial_pred", "spatial_pred", "o
 
 xy_radar <- read.csv("Z:/modelling/yxtable.csv")  
 rm(list = ls(pattern = "radar_"))  
-for(Site in c("BWA_NOR", "KEN_LAI", "KEN_TSV", "XWA_TBC", "ZWE_MAT", "ZWE_ZV", "ZWE_SELV")) assign(paste0("radar_", Site), ggiraphExtra::ggRadar(data = xy_radar[xy_radar$Site == Site, c(splines, "HT", "Site")], aes(color = HT), scales = "free", rescale = T, interactive = T))
-+ggtitle(Site)+theme(legend.position = "none"))
-
+for(Site in c("BWA_NOR", "KEN_LAI", "KEN_TSV", "XWA_TBC", "ZWE_MAT", "ZWE_ZV", "ZWE_SELV")) assign(paste0("radar_", Site), ggiraphExtra::ggRadar(data = xy_radar[xy_radar$Site == Site, c(splines, "HT", "Site")], aes(color = HT), scales = "free", rescale = T))
 ggiraphExtra::ggRadar(data = xy_radar[xy_radar$Site == Site, c(splines, "HT")], aes(color = HT), scales = "free", rescale = T, interactive = T)+ggtitle(Site)+theme(legend.position = "none")
 
-
 do.call(gridExtra::grid.arrange, mget(ls(pattern = "radar_")))
-radar_ZWE_MAT
-?ggRadar
