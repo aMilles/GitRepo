@@ -133,10 +133,11 @@ for(pred in names(all.preds)[which(!names(all.preds) %in% c("REPS", "ID", "CC", 
   if(bt_value == 0) bt <- exp(transformed[,pred])
   if(bt_value != 0) bt <- transformed[,pred]^(1/bt_value)
   
-  shift <- median(orig - (bt + abs(min(all.preds[,pred])) + 1e-64))
+  shift <- median(orig - bt)
   transform_sheet$shift[which(transform_sheet$name == pred)] <- shift
+  par(mfrow = c(1,2))
   hist(orig, main = paste0("original ", pred))
-  hist((bt + abs(min(all.preds[,pred])) + 1e-64 + shift), main = paste0("backtransformed ", pred))
+  hist((bt + shift), main = paste0("backtransformed ", pred))
 } 
 
 write.csv(transform_sheet, "Z:/modelling/transform_sheet.csv")
@@ -195,8 +196,10 @@ rquery.cormat.spearman(cbind(all.preds[, which(!names(scale_transformed) %in% c(
 
 
 #correlation between transformed + scaled values
-spearman <- rquery.cormat.spearman(scale_transformed[, which(!names(scale_transformed) %in% c("REPS", "ID", "CC", "HT", "PA", "COUNT", "Country", "Transect", "Site"))], graphType = "heatmap")$r
 
+pdf("C:/Users/amilles/Dropbox/Master/Umweltwissenschaften/Masterarbeit/figures/corplot.pdf", width = 4, height = 4)
+spearman <- rquery.cormat.spearman(scale_transformed[, which(!names(scale_transformed) %in% c("REPS", "ID", "CC", "HT", "PA", "COUNT", "Country", "Transect", "Site"))])$r
+dev.off()
 spearman <- data.frame(apply(spearman, 1, function(x) as.numeric(as.character(x))))
 cornames <- names(spearman) 
 spearman$names <- cornames

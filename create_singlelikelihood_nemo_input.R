@@ -14,7 +14,7 @@ model.family = "binomial"
 selection = c("ZWE", "BWA", "KEN") #ISO3 Country Code or "all" if non selection should be made, Site Codes if sites are selected ("ZWE_MAT") c("BWA_NOR", "KEN_LAI", "KEN_TSV", "XWA_TBC", "ZWE_MAT", "ZWE_ZV", "ZWE_SELV")
 selection.level = "Country" #"Country" or "Site"
 nb_dist = 5000 #maximum distance considered as a neighbor [m]
-xval = T #prepare data for cross validation
+xval = F #prepare data for cross validation
 xval.type = "KOSI" #LSO = leave some out, LOSO = leave one site out, KOSI = keep one site in
 LSO.folds = 10 #number of folds
 splines = NA #transform these predictors to splines c("WA", "VD", "AI", "LD", "TV", "NA.")

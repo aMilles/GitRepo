@@ -36,7 +36,8 @@ if(!"buffer" %in% ls()) buffer <- readOGR("Z:/GEC/buffered_segments.shp")
 #load("Z:/NEMO_out/output_ZWE_complex_binomial_nonspatial_spatial_5km_splines_prec1e-04.RData")
 #load("Z:/NEMO_out/output_BWA_NOR_KEN_LAI_KEN_TSV_XWA_TBC_ZWE_MAT_ZWE_ZV_ZWE_SELV_complex_binomial_nonspatial_spatial_5km_splines_prec1e-04.RData")
 #load("Z:/NEMO_out/output_ZWE_complex_binomial_nonspatial_spatial_5km_splines_prec1e-04.RData")
-load("Z:/NEMO_out/output_ZWE_complex_binomial_nonspatial_spatial_xval_KOSI_5km_prec1e-04.RData")
+#load("Z:/NEMO_out/output_ZWE_complex_binomial_nonspatial_spatial_xval_KOSI_5km_prec1e-04.RData")
+load("Z:/NEMO_out/output_ZWE_BWA_KEN_complex_binomial_nonspatial_spatial_5km_prec1e-04.RData")
 
 xy_backup <- xy
 #replace scaled and transformed xy values with original values

@@ -253,8 +253,8 @@ marginal.quantiles <- function(marg.vars, effect.of, posterior.dist, original.df
         if(is.factor(ic.all)){
           unscaled.ic <- ic <- levels(ic.all)
         }else{
-          ic <- ic.all[c(5, 95)]
-          unscaled.ic <- original.seqs[c(5, 95),interaction]  
+          ic <- ic.all[c(10, 90)]
+          unscaled.ic <- original.seqs[c(10, 90),interaction]  
         }
         
         for(i in seq(length(ic))){
@@ -269,10 +269,11 @@ marginal.quantiles <- function(marg.vars, effect.of, posterior.dist, original.df
           backup.values <- ic.df[,interaction]
           ic.df[,interaction] <- value
           names(ic.df) <- save.names
+          print(head(ic.df))
           ic.df <- model.matrix(as.formula(paste0("~", formula)), ic.df)
           
           if(interaction %in% colnames(ic.df)) ic.df[,match(interaction, colnames(ic.df))] <- backup.values
-          
+          print(head(ic.df))
           
           strt<-Sys.time()
           out <- foreach(i =  seq(nrow(marg.vars)), .combine = "rbind", .export = c("prob")) %do% {
@@ -301,7 +302,7 @@ marginal.quantiles <- function(marg.vars, effect.of, posterior.dist, original.df
     if(!silent) print('calculate probabilities')
     strt<-Sys.time()
     
-    out <- foreach(i =  seq(nrow(marg.vars) * nrow(interactor.hist)), .combine = "rbind", .export = c("prob")) %dopar% {
+    out <- foreach(i =  seq(nrow(marg.vars) * nrow(interactor.hist)), .combine = "rbind", .export = c("prob")) %do% {
       this.rows <- seq(nrow(scaled.df)) + (nrow(scaled.df) * (i - 1))
       if(!silent) print(range(this.rows))
       dprobs <- invlogit(ext.df[this.rows,] %*% t(as.matrix(posterior.dist)))
