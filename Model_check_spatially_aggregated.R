@@ -13,35 +13,20 @@ library(raster)
 library(grid)
 library(scales)
 library(viridis)
+library(ranger)
 library(ggiraphExtra)
 rm(list = ls()[which(ls() != "segments")])
 if(!"segments" %in% ls()) segments <- readOGR("Z:/GEC/segments_GEE.shp")
 if(!"buffer" %in% ls()) buffer <- readOGR("Z:/GEC/buffered_segments.shp")
+#source("https://raw.githubusercontent.com/aMilles/GitRepo/master/function_file.R")
+source("Z:/GitRepo/function_file.R")
 
+load("Z:/NEMO_out/output_ZWE_MAT_ZWE_ZV_ZWE_SELV_ZWE_SEB_complex_binomial_nonspatial_spatial_xval_LSO_5km_prec1e-04.RData")
 
-#load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_xval_5km.RData")
-#load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_xval_LSO_5km.RData")
-#load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_xval_LOSO_5km.RData")
-#load("Z:/NEMO_out/output_KEN_ZWE_simple_binomial_nonspatial_spatial_xval_LOSO_5km.RData")
-#load("Z:/NEMO_out/output_all_simple_binomial_nonspatial_spatial_xval_LSO_5km.RData")
-#load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_xval_LOSO_5km_splines.RData")
-#load("Z:/NEMO_out/output_ZWE_simple_zeroinflated.binomial.0_nonspatial_spatial_xval_LOSO_5km.RData")
-#load("Z:/NEMO_out/output_all_complex_binomial_nonspatial_spatial_5km_splines.RData")
-#load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_5km_splines.RData")
-#load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_xval_LSO_5km.RData")
-#load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_5km_splines.RData")
-#load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_xval_LOSO_5km_splines.RData")
-#load("Z:/NEMO_out/output_ZWE_complex_binomial_nonspatial_spatial_5km_splines_prec1e-04_nottransformed.RData")
-#load("Z:/NEMO_out/output_ZWE_complex_binomial_nonspatial_spatial_5km_splines_prec1e-04.RData")
-#load("Z:/NEMO_out/output_ZWE_complex_binomial_nonspatial_spatial_5km_splines_prec1e-04.RData")
-#load("Z:/NEMO_out/output_BWA_NOR_KEN_LAI_KEN_TSV_XWA_TBC_ZWE_MAT_ZWE_ZV_ZWE_SELV_complex_binomial_nonspatial_spatial_5km_splines_prec1e-04.RData")
-#load("Z:/NEMO_out/output_ZWE_complex_binomial_nonspatial_spatial_5km_splines_prec1e-04.RData")
-#load("Z:/NEMO_out/output_ZWE_complex_binomial_nonspatial_spatial_xval_KOSI_5km_prec1e-04.RData")
-load("Z:/NEMO_out/output_ZWE_BWA_KEN_complex_binomial_nonspatial_spatial_5km_prec1e-04.RData")
-
+dropbox.file = "C:/Users/amilles/Dropbox/"
 xy_backup <- xy
 #replace scaled and transformed xy values with original values
-xy2 <- read.csv("Z:/modelling/yxtable.csv")[,-c(1)]
+xy2 <- read.csv(paste0(dropbox.file, "modelling/yxtable.csv"))[,-c(1)]
 unique(xy2$Site)
 xy2 <- xy2[match(as.character(xy$ID), as.character(xy2$ID)),]
 xy[, names(xy2)] <- xy2
@@ -54,7 +39,7 @@ if(model.family %in% c("binomial", "zeroinflated.binomial.0", "zeroinflated.bino
 
 
 if(xval){
-  identifier <- ifelse(xval.type %in% c("Site", "LOSO", "KOSI"), 4, 3)
+  identifier <- ifelse(xval.type %in% c("LOSO", "KOSI"), 4, 3)
   spatial_summary <- nonspatial_summary <- vector("list", length(ls(pattern = "_nonspatial_model$")))
   pred.site.names <- NULL
   for(model in ls(pattern = "_nonspatial_model$")){
@@ -90,6 +75,23 @@ if(!xval){
 }
 
 
+f.inla <- paste0(stringi::stri_replace_all_fixed(f,  "+ f(Site, model = \"iid\")", ""))
+f.ranger <- paste0("as.factor(obs) ~ ", paste(unique(strsplit(stringi::stri_replace_all_fixed(stringi::stri_replace_all_fixed(f.inla, ":", " "), "+ ", ""), " ")[[1]]), collapse = " + "))
+segments_df$Block <- as.factor(xy$Site)
+
+rF_preds <-  NULL
+
+for(block in unique(xy$Block)){
+  rows = which(xy$Block == block)
+  rF <- ranger::ranger(f.ranger, xy[-rows,], probability = T, importance = "impurity")
+  p <- predict(rF, data = xy[rows,])$predictions[,1]
+  rF_preds <- append(rF_preds, p)
+}
+
+hist(xy[-rows,]$obs - rF$predictions[,1])
+
+xy$rF_preds <- rF_preds
+
 # for(block in ls(pattern = "xy_without_")[seq(1,length(ls(pattern = "xy_without_")), 3)]) plot(is.na(get(block)$obs))
 # m$summary.linear.predictor$`0.5quant`
 
@@ -97,7 +99,7 @@ fit_summary <- read.csv("Z:/residual_analysis/summary.csv", stringsAsFactors = F
 
 #Rough Summary
 Efrons <- NULL
-for(i in c("spatial_pred", "nonspatial_pred")){
+for(i in c("spatial_pred", "nonspatial_pred", "rF_preds")){
   print(paste0(i, ": binomial sum ", sum(xy[,i])))
   print(paste0("observed binomial sum ", sum(xy$obs)))
   #plot(xy[,i], xy$obs, pch = "|", main = i)
@@ -125,9 +127,21 @@ fit.df <- data.frame(matrix(out, nc = 2, byrow = T), model = rep(c("spatial", "n
 names(fit.df)[1:2] <- c("detection_ratio", "effron's R-squared")
 ggplot(fit.df, aes(x = detection_ratio, y = `effron's R-squared`, group = model, col = site, fill = model, shape = model, color = model))+
   geom_point(size = 5)+
-  geom_smooth(method = "lm", se = F)
-fit.df[fit.df$detection_ratio > 0.1,]
+  geom_smooth(method = "lm", se = F)+
+  geom_label(aes(label = site))
 
+
+ggfit <- ggplot(fit.df[fit.df$model == "spatial",], aes(x = detection_ratio, y = `effron's R-squared`))+
+  geom_label(aes(label = site),position=position_jitter(width=0.0,height=.1), label.size = 0, alpha = 0)+
+  geom_point(size = 5, shape = "+", col = "firebrick")+
+  xlab("ratio of detections per subunit")+
+  theme_bw()+
+  theme(text = element_text(size = 14))
+  #geom_smooth(method = "lm", se = F)
+
+pdf(paste0("C:/Users/amilles/Dropbox/Master/Umweltwissenschaften/Masterarbeit/figures/resubstitution_effron", output_name, ".pdf"), width = 9, height = 3)
+ggfit
+dev.off()
 #Variation of coefficients
 summaries <- data.frame(rbind(do.call(rbind, nonspatial_summary), do.call(rbind, spatial_summary)))
 
@@ -145,6 +159,31 @@ predictors <- data.frame("predictor" = rep(row.names(nonspatial_summary[[1]]), l
     facet_wrap(~spatial, nc = 1)+
     ylab("coefficient estimate")+
     ylim(c(-2, 2)))
+
+
+
+tf_sheet <- read.csv("C:/Users/amilles/Dropbox/modelling/transform_sheet.csv")
+reverse <- tf_sheet$name[tf_sheet$value < 0]
+
+for(pred in reverse){
+  rows <- (stringi::stri_count_regex(as.character(predictors$predictor), pred)) > 0
+    predictors[rows, c(2:4)] <- predictors[rows, c(2:4)] * -1
+
+}
+  
+
+pdf(paste0("C:/Users/amilles/Dropbox/Master/Umweltwissenschaften/Masterarbeit/figures/predictor_coefficients_", output_name, ".pdf"), width = 5, height = 8)
+(summary.plot <- 
+    ggplot(predictors[predictors$spatial == "spatial" & predictors$predictor != "(Intercept)",], aes(x = predictor, y = value, ymax = upper, ymin = lower, col = Site))+
+    geom_abline(slope = 0, col = "gray")+
+    geom_point()+
+    geom_errorbar()+
+    ylab("coefficient estimate (95%-interval)")+
+    theme_bw()+
+    theme(legend.position = "none", text = element_text(size = 14)))+
+    coord_flip()
+dev.off()
+
 
 # Spatial analysis
 #add observations and predictions to the segments
@@ -167,146 +206,60 @@ spatial_dep_non_spatial_m <- ncf::correlog(x = spatial_dep$long, y = spatial_dep
 spatial_dep_spatial_m <- ncf::correlog(x = spatial_dep$long, y = spatial_dep$lat, z = spatial_dep$spatial_pred - spatial_dep$obs, increment = 5, resamp = 2, latlon = T)
 
 
-### FUNCTION ###
-# Plot a Map of residuals, observations or predictions..
-map_site <- function(df = segments_df, p = "spatial_pred", o = "obs", plot.what = "r", filter = NA, title = NA, interpolate = T, buffer.it = T, buffer.spdf = buffer, lower = T){
-  
-  #use unique names for plotting
-  df <- df[,match(c("long","lat", "Site", p,o, "HT", "Block"), names(df))]
-  names(df)[c(4,5)] <- c("p", "o")
-  df$r <- df$o - df$p
-  df$input <- df[,match(plot.what, names(df))]
-  df$input[sample(nrow(df), 2)] <- c(ifelse(plot.what == "r", -1, 0), 1)
+source("Z:/GitRepo/function_file.R")
 
-  #create a filter, to exclude extreme values, that may affect color ranges
-  if(!all(is.na(filter))){
-    df$input[df$input > quantile(df$input, filter[2], na.rm = T)] <- NA
-    df$input[df$input < quantile(df$input, filter[1], na.rm = T)] <- NA
-  }
-  
-  name <- ifelse(plot.what == "r", "Residuals", get(plot.what))
-  
-  #take a subsample of the data for residuals vs. predicted plot
-  samples.df <- c(which(df$o == 1)[round(seq(1, length(which(df$o == 1)), length = 1000))],
-                  which(df$o == 0)[round(seq(1, length(which(df$o == 1)), length = 1000))])
-
-  
-  #create a interpolation surface
-  for(site in unique(df$Block)){
-    map.subset <- df[segments_df$Site == site, c("long", "lat", "input")]
-      
-    if(!buffer.it){
-      mba <- MBA::mba.surf(map.subset, 300, 300, extend = FALSE)
-      dimnames(mba$xyz.est$z) <- list(mba$xyz.est$x, mba$xyz.est$y)
-      out <- data.frame(reshape2::melt(mba$xyz.est$z, varnames = c('long', 'lat'), value.name = "input"), Block = site)
-    }
-      
-    if(buffer.it){
-      out <- raster(MBA::mba.surf(map.subset, 300, 300, sp = T)$xyz.est)
-      masked_mba <- mask(out, buffer.spdf)
-      out <- data.frame(as.data.frame(as(masked_mba, "SpatialPixelsDataFrame")), Block = site)
-    }
-      
-    names(out) <- c("input", 'long', 'lat', "Block")
-    assign(paste0("ipblock_", site), out)
-      
-  }
-    
-  df_map <- cbind(do.call(rbind, mget(ls(pattern = "ipblock_"))))
-    
-  gg_map <- 
-    ggplot()+
-    geom_raster(data = df_map, aes(x = long, y = lat, fill = input))+
-    coord_equal()+
-    scale_fill_viridis()+
-    facet_wrap(~Block, scales = "free")+
-    theme_light()+
-    theme(legend.position="bottom", plot.background = element_rect(color = "gray")) +
-    theme(legend.key.width=unit(2, "cm"))+
-    guides(fill = guide_legend(title = name))+
-    xlab("Longitude [°]")+
-    ylab("Latitude [°]")+
-    ggtitle(name)
-  
-    
-  #print("create hist")
-  if(plot.what == "r" & lower){
-    gg_resid_hist <- 
-      ggplot()+
-      geom_histogram(data = df, aes(x = input, col = o, fill = o), bins = 100)+
-      scale_y_log10()+
-      xlab("residuals (o - p)")+
-      ylab("log10(count)")+
-      theme_gray()+
-      theme(legend.position = "none")+
-      xlim(c(-1,1))
-    
-    #print("create scatter")
-    gg_resid_scatter <- 
-      ggplot()+
-      geom_point(data = df[samples.df, ], aes(x = r, y = p), shape = "|", alpha = .2)+
-      xlab("residuals (o - p)")+
-      ylab("predicted")+
-      xlim(c(-1,1))+
-      theme_gray()
- 
-     gg_map <- 
-       gridExtra::grid.arrange(gg_map, 
-                               gg_resid_hist, 
-                               gg_resid_scatter,
-                               layout_matrix = matrix(c(1,1,1,2,1,1,1,3), nc = 2),
-                               top = title)
-  }else{
-    if(lower){
-      gg_hist <- 
-        ggplot(data = df, aes(input, fill = HT, color = HT, alpha = .5))+
-        geom_density()+
-        guides(fill = guide_legend(title = "Observed"), alpha = F, col = F)+
-        scale_fill_manual(values = c("firebrick", "turquoise", "white"))+
-        facet_wrap(~Block, scales = "free")
-      
-      
-      gg_map <- 
-        gridExtra::grid.arrange(gg_map, 
-                                gg_hist,
-                                layout_matrix = matrix(c(1,1,1,2,2,1,1,1,2,2), nc = 2),
-                                top = title)
-    }
-    
-
-  }
-  return(gg_map)
-}
 
 #save those plots in one pdf
-segments_df$Block <- segments_df$Site
-segments_df$WA <- segments_df$WA/1000
-map_site(df = segments_df, o = "obs", p = "spatial_pred", plot.what = "p", title = "non-spatial model", buffer.it = T)
-map_site(df = segments_df, o = "obs", p = "VD", plot.what = "p", title = "non-spatial model", buffer.it = T)
 
-names(test) <- c("input", "long", "lat", "Block")
+hist(segments_df$rF_pred)
+summary(segments_df$rF_pred)
+segments_df$prediction_log10 <- log10(segments_df$spatial_pred)
+pdf(paste0(dropbox.file, "Master/Umweltwissenschaften/Masterarbeit/figures/", output_name, "predictions_rF.pdf"), onefile = T)
+for(Site in as.character(unique(segments_df$Site))){
+ print(
+   map <- map_site(df = segments_df[segments_df$Site == Site,], o = "obs", p = "rF_preds", plot.what = "p", title = paste0("Prediction: ", Site), buffer.it = T, lower = F, plot.range = c(-0.01, 1)) +
+     geom_point(data = segments_df[segments_df$obs == 1 & segments_df$Site == Site, c("long", "lat", "Block")], aes(x = long, y = lat), shape = "+")+
+     guides(fill = guide_colorbar(title = "Habitat Suitability"))+
+     ggtitle("")+
+     theme(text = element_text(size = 14))
+   )
+}
+dev.off()
 
-ggplot()+
-  geom_raster(data = test, aes(x = long, y = lat, fill = input))+
-  coord_equal()+
-  scale_fill_viridis()+
-  facet_wrap(~Block, scales = "free")+
-  theme_light()+
-  theme(legend.position="bottom", plot.background = element_rect(color = "gray")) +
-  theme(legend.key.width=unit(2, "cm"), legend.title = name)+
-  xlab("Longitude [°]")+
-  ylab("Latitude [°]")
 
+
+
+samples <- t(as.matrix(sample.fixed.params(xy_without_block10_spatial_model, nsample = 100)))
+xy.m <- xy_backup
+xy.m$Site[] <- "ZWE_MAT"
+m <- model.matrix(as.formula(paste0("obs ~", f.inla)), xy_backup)
+prob <- invlogit(m %*% samples)
+prob <- apply(data.frame(prob), 1, median)
+
+segments_df$prediction_log10 <- log10(segments_df$spatial_pred_xy_without_ZWE_SELV)
+segments_df$inla.pred <- prob 
+
+all.map <- map_site(df = segments_df, o = "obs", p = "inla.pred", plot.what = "p", title = paste0("Prediction: ", Site), buffer.it = T, lower = F, plot.range = c(-0.01, 1))+
+  geom_point(data = segments_df[segments_df$obs == 1, c("long", "lat", "Block")], aes(x = long, y = lat), shape = 20, col = "white", fill = "black", alpha = 0.8, size = .5)+
+  guides(fill = guide_colorbar(title = "Habitat Suitability"))+
+  scale_fill_gradientn(colors = viridis::cividis(5))+
+  ggtitle("")+
+  theme(text = element_text(size = 14))
+
+pdf(paste0(dropbox.file, "Master/Umweltwissenschaften/Masterarbeit/figures/", output_name, "all_predictions_nositeeffect.pdf"), onefile = T)
+all.map
+dev.off()
+
+
+
+map.preds <- c("AD", "LD", "TV", "AR", "SM", "VD", "WA", "SS", "SC", "TC", "SL")
 
 for(i in seq(10)) dev.off()
 {
   pdf(file = paste0("Z:/residual_analysis/",tools::file_path_sans_ext(output_name), ".pdf"), onefile = T,paper = "a4", width = 8.27, height = 11.69)
-    plot(spatial_dep_non_spatial_m$mean.of.class, spatial_dep_non_spatial_m$correlation, type = "l", lty = "dashed", main = "correlogram, ZWE_MAT")
-    lines(x = spatial_dep_spatial_m$mean.of.class, y = spatial_dep_spatial_m$correlation, lty = "solid", col = "green")
-    map_site(df = segments_df, o = "obs", p = "spatial_pred", plot.what = "r", title = "Residuals: spat model")
-    map_site(df = segments_df, o = "obs", p = "nonspatial_pred", plot.what = "r", title = "Residuals: nspat model")
-    for(predictor in rev(strsplit(f, " +")[[1]][-seq(2, length(strsplit(f, " +")[[1]]), 2)])[-1]){
-      map_site(df = segments_df, o = "obs", p = predictor, plot.what = "p", title = predictor)
+    for(predictor in map.preds){
+      print(map_site(df = segments_df, o = "obs", p = predictor, plot.what = "p", title = predictor, lower = F, plot.range = range(segments_df[, predictor]))+
+              geom_point(data = segments_df[segments_df$obs == 1, c("long", "lat", "Block")], aes(x = long, y = lat), shape = "+"))
     }
   dev.off()
 }

@@ -58,7 +58,7 @@ track.readGPX.element <- function(file) {
   return(ret)
 }
 
-
+seq(0,59,12)
 #MODIFIED
 
 # source("http://www.sthda.com/upload/rquery_cormat.r")
@@ -221,7 +221,7 @@ conditional.plot <- function(cond.vars, effect.of, model, posterior.samples, ori
 
 
 
-marginal.quantiles <- function(marg.vars, effect.of, posterior.dist, original.df, scaled.df, interactions, original.seqs, silent = F, formula, interact = T){
+marginal.quantiles <- function(marg.vars, effect.of, posterior.dist, original.df, scaled.df, interactions, original.seqs, silent = F, formula, interact = T, randomForest = F, rF.model = NA){
   
   if(!silent) print('initialize matrix')
   keep.dynamic <- which(substring(effect.of,1,2) == substring(names(marg.vars),1,2) |
@@ -275,15 +275,27 @@ marginal.quantiles <- function(marg.vars, effect.of, posterior.dist, original.df
           if(interaction %in% colnames(ic.df)) ic.df[,match(interaction, colnames(ic.df))] <- backup.values
           print(head(ic.df))
           
-          strt<-Sys.time()
-          out <- foreach(i =  seq(nrow(marg.vars)), .combine = "rbind", .export = c("prob")) %do% {
-            this.rows <- seq(nrow(scaled.df)) + (nrow(scaled.df) * (i - 1))
-            dprobs <- invlogit(ic.df[this.rows,] %*% t(as.matrix(posterior.dist)))
-            
-            return(quantile(dprobs, probs = c(0.025, 0.25, 0.5, 0.75, 0.975), na.rm = T))
+          
+          if(randomForest == T){
+            strt<-Sys.time()
+            ic.df <- data.frame(ic.df)
+            p <- predict(rF.model, data = ic.df)
+            p <- p$predictions[,2]
+            out <- do.call(rbind, mget(rep("p", 5)))
+            print(Sys.time() - strt)
           }
-          print(Sys.time() - strt)
-          print(nrow(out))
+          
+          if(randomForest == F){
+            strt<-Sys.time()
+            out <- foreach(i =  seq(nrow(marg.vars)), .combine = "rbind", .export = c("prob")) %do% {
+              this.rows <- seq(nrow(scaled.df)) + (nrow(scaled.df) * (i - 1))
+              dprobs <- invlogit(ic.df[this.rows,] %*% t(as.matrix(posterior.dist)))
+              
+              return(quantile(dprobs, probs = c(0.025, 0.25, 0.5, 0.75, 0.975), na.rm = T))
+            }
+            print(Sys.time() - strt)
+          }
+          
           interactor.hist <- rbind(interactor.hist, data.frame(pred = interaction, value = hist.value))
           assign(paste0("interactvalue_", value), out)
           row.names(out) <- NULL
@@ -300,15 +312,33 @@ marginal.quantiles <- function(marg.vars, effect.of, posterior.dist, original.df
   if(!interact){
     ext.df <- model.matrix(as.formula(paste0("~", formula)), ext.df)
     if(!silent) print('calculate probabilities')
-    strt<-Sys.time()
     
-    out <- foreach(i =  seq(nrow(marg.vars) * nrow(interactor.hist)), .combine = "rbind", .export = c("prob")) %do% {
-      this.rows <- seq(nrow(scaled.df)) + (nrow(scaled.df) * (i - 1))
-      if(!silent) print(range(this.rows))
-      dprobs <- invlogit(ext.df[this.rows,] %*% t(as.matrix(posterior.dist)))
-      return(quantile(dprobs, probs = c(0.025, 0.25, 0.5, 0.75, 0.975), na.rm = T))
-    } 
-    print(Sys.time() - strt)
+    if(randomForest == T){
+      strt<-Sys.time()
+      names <- colnames(ext.df)
+      ext.df <- data.frame(ext.df)
+      names(ext.df) <- names
+      print(head(ext.df))
+      p <- predict(rF.model, data = ext.df)
+      p <- p$predictions
+      psplit <- split.data.frame(data.frame(p[,2]), f = rep(1:100, each = nrow(ext.df)/100))
+      out <- lapply(psplit, function(x) quantile(x, probs = c(0.025, 0.25, 0.5, 0.75, 0.975), na.rm = T))
+      out <- do.call(rbind, out)
+      print(Sys.time() - strt)
+    }
+    
+    if(randomForest == F){
+      strt<-Sys.time()
+      
+      out <- foreach(i =  seq(nrow(marg.vars) * nrow(interactor.hist)), .combine = "rbind", .export = c("prob")) %do% {
+        this.rows <- seq(nrow(scaled.df)) + (nrow(scaled.df) * (i - 1))
+        if(!silent) print(range(this.rows))
+        dprobs <- invlogit(ext.df[this.rows,] %*% t(as.matrix(posterior.dist)))
+        return(quantile(dprobs, probs = c(0.025, 0.25, 0.5, 0.75, 0.975), na.rm = T))
+      } 
+      print(Sys.time() - strt)
+    }
+    
   }
   
   
@@ -351,4 +381,113 @@ effect.plot <- function(quantiles.i, quantiles.o, lines, df, rug, with.lines, ef
 
   
   return(gg)
+}
+
+
+map_site <- function(df = segments_df, p = "spatial_pred", o = "obs", plot.what = "r", filter = NA, title = NA, interpolate = T, buffer.it = T, buffer.spdf = buffer, lower = T, plot.range = c(0,1)){
+  
+  #use unique names for plotting
+  df <- df[,match(c("long","lat", "Site", p,o, "HT", "Block"), names(df))]
+  names(df)[c(4,5)] <- c("p", "o")
+  df$r <- df$o - df$p
+  df$input <- df[,match(plot.what, names(df))]
+  df$input[sample(nrow(df), 2)] <- c(ifelse(plot.what == "r", -1, 0), 1)
+  
+  #create a filter, to exclude extreme values, that may affect color ranges
+  if(!all(is.na(filter))){
+    df$input[df$input > quantile(df$input, filter[2], na.rm = T)] <- NA
+    df$input[df$input < quantile(df$input, filter[1], na.rm = T)] <- NA
+  }
+  
+  name <- ifelse(plot.what == "r", "Residuals", get(plot.what))
+  
+  #take a subsample of the data for residuals vs. predicted plot
+  samples.df <- c(which(df$o == 1)[round(seq(1, length(which(df$o == 1)), length = 1000))],
+                  which(df$o == 0)[round(seq(1, length(which(df$o == 1)), length = 1000))])
+  
+  
+  #create a interpolation surface
+  for(site in unique(df$Block)){
+    map.subset <- df[df$Site == site, c("long", "lat", "input")]
+    
+    if(!buffer.it){
+      mba <- MBA::mba.surf(map.subset, 300, 300, extend = FALSE)
+      dimnames(mba$xyz.est$z) <- list(mba$xyz.est$x, mba$xyz.est$y)
+      out <- data.frame(reshape2::melt(mba$xyz.est$z, varnames = c('long', 'lat'), value.name = "input"), Block = site)
+    }
+    
+    if(buffer.it){
+      out <- raster(MBA::mba.surf(map.subset, 300, 300, sp = T)$xyz.est)
+      masked_mba <- mask(out, buffer.spdf)
+      out <- data.frame(as.data.frame(as(masked_mba, "SpatialPixelsDataFrame")), Block = site)
+    }
+    
+    names(out) <- c("input", 'long', 'lat', "Block")
+    assign(paste0("ipblock_", site), out)
+    
+  }
+  
+  df_map <- cbind(do.call(rbind, mget(ls(pattern = "ipblock_"))))
+  
+  gg_map <- 
+    ggplot()+
+    #coord_equal()+
+    geom_raster(data = df_map, aes(x = long, y = lat, fill = input))+
+    scale_fill_viridis(limits = plot.range, na.value = "black")+
+    facet_wrap(~Block, scales = "free")+
+    theme_light()+
+    theme(legend.position="bottom", plot.background = element_rect(color = "gray")) +
+    theme(legend.key.width=unit(2, "cm"))+
+    xlab("longitude  [°E]")+
+    ylab("latitude [°N]")+
+    ggtitle(name)
+  
+  
+  #print("create hist")
+  if(plot.what == "r" & lower){
+    gg_resid_hist <- 
+      ggplot()+
+      geom_histogram(data = df, aes(x = input, col = o, fill = o), bins = 100)+
+      scale_y_log10()+
+      xlab("residuals (o - p)")+
+      ylab("log10(count)")+
+      theme_gray()+
+      theme(legend.position = "none")+
+      xlim(c(-1,1))
+    
+    #print("create scatter")
+    gg_resid_scatter <- 
+      ggplot()+
+      geom_point(data = df[samples.df, ], aes(x = r, y = p), shape = "|", alpha = .2)+
+      xlab("residuals (o - p)")+
+      ylab("predicted")+
+      xlim(c(-1,1))+
+      theme_gray()
+    
+    gg_map <- 
+      gridExtra::grid.arrange(gg_map, 
+                              gg_resid_hist, 
+                              gg_resid_scatter,
+                              layout_matrix = matrix(c(1,1,1,2,1,1,1,3), nc = 2),
+                              top = title)
+  }else{
+    if(lower){
+      gg_hist <- 
+        ggplot(data = df, aes(input, fill = HT, color = HT, alpha = .5))+
+        geom_density()+
+        guides(fill = guide_legend(title = "Observed"), alpha = F, col = F)+
+        scale_fill_manual(values = c("firebrick", "turquoise", "white"))+
+        facet_wrap(~Block, scales = "free")
+      
+      
+      gg_map <- 
+        gridExtra::grid.arrange(gg_map, 
+                                gg_hist,
+                                layout_matrix = matrix(c(1,1,1,2,2,1,1,1,2,2), nc = 2),
+                                top = title)
+    }
+    
+    
+  }
+  return(gg_map)
 }

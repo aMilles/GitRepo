@@ -6,22 +6,10 @@ library(foreach)
 library(doSNOW)
 library(doParallel)
 library(gridExtra)
+library(ranger)
 
 #read Model output from nemo
-#load("Z:/NEMO_out/output_all_complex_binomial_nonspatial_spatial_5km_splines.RData")
-#load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_xval_LSO_5km.RData")
-#load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_5km_splines.RData")
-#load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_xval_LOSO_5km_splines.RData")
-#load("Z:/NEMO_out/output_ZWE_BWA_complex_binomial_nonspatial_spatial_5km_splines.RData")
-#load("Z:/NEMO_out/output_BWA_NOR_KEN_LAI_KEN_TSV_XWA_TBC_ZWE_MAT_ZWE_ZV_ZWE_SELV_complex_binomial_nonspatial_spatial_5km_splines.RData")
-#load("Z:/NEMO_out/output_ZWE_BWA_complex_binomial_nonspatial_spatial_5km_splines.RData")
-#load("Z:/NEMO_out/output_all_complex_binomial_nonspatial_spatial_5km_splines.RData")
-#load("Z:/NEMO_out/output_ZWE_simple_binomial_nonspatial_spatial_5km_splines.RData")
-#load("Z:/NEMO_out/output_BWA_NOR_KEN_LAI_KEN_TSV_XWA_TBC_ZWE_MAT_ZWE_ZV_ZWE_SELV_complex_binomial_nonspatial_spatial_5km_splines_prec1e-04.RData")
-#load("Z:/NEMO_out/output_ZWE_complex_binomial_nonspatial_spatial_5km_splines_prec1e-04.RData")
-load("Z:/NEMO_out/output_BWA_NOR_KEN_LAI_KEN_TSV_XWA_TBC_ZWE_MAT_ZWE_ZV_ZWE_SELV_complex_binomial_nonspatial_spatial_5km_splines_prec1e-04.RData")
-#load("Z:/NEMO_out/output_ZWE_BWA_KEN_complex_binomial_nonspatial_spatial_5km_prec1e-04.RData")
-#load("Z:/NEMO_out/output_ZWE_complex_binomial_nonspatial_spatial_5km_prec1e-04.RData")
+load("Z:/NEMO_out/output_all_complex_binomial_nonspatial_spatial_5km_prec1e-04.RData")
 
 if(is.numeric(xy$ID)) xy$ID <- segments_new$ID
 
@@ -37,19 +25,20 @@ f <- stringi::stri_replace_all_fixed(f, "\n", "")
 #get a vector of predictors used for the model
 f <- stringi::stri_replace_all_regex(f, " ", "")
 f <- stringi::stri_replace_all_fixed(f, "+", " + ")
+f <- stringi::stri_replace_all_fixed(f, " + f(Site,model=\"iid\")", "")
 preds <- as.vector(na.omit(stringi::stri_replace_all_fixed(strsplit(f, "+ ")[[1]], "+", NA)))
 
 #read the transformation and scale sheet
-tf_sheet <- read.csv("Z:/modelling/transform_sheet.csv", stringsAsFactors = F, row.names = 1)
-scale_sheet <- read.csv("Z:/modelling/scale_sheet.csv", stringsAsFactors = F)
+tf_sheet <- read.csv("C:/Users/amilles/Dropbox/modelling/transform_sheet.csv", stringsAsFactors = F, row.names = 1)
+scale_sheet <- read.csv("C:/Users/amilles/Dropbox/modelling/scale_sheet.csv", stringsAsFactors = F)
 #"NA" predictor gets confused with NA ...
 tf_sheet$name[is.na(tf_sheet$name)] <- "NA." -> scale_sheet$name[is.na(scale_sheet$name)]
 
 #read dataset without scale/transformation and read data with scale and transformation
-unscaled_df <- read.csv("Z:/modelling/yxtable.csv")
+unscaled_df <- read.csv("C:/Users/amilles/Dropbox/modelling/yxtable.csv")
 all_unscaled <- unscaled_df
-scaled_transformed <- read.csv("Z:/modelling/yxtable_scaled_transformed.csv")
-transformed <- read.csv("Z:/modelling/yxtable_transformed.csv")
+scaled_transformed <- read.csv("C:/Users/amilles/Dropbox/modelling/yxtable_scaled_transformed.csv")
+transformed <- read.csv("C:/Users/amilles/Dropbox/modelling/yxtable_transformed.csv")
 #get the matching values of the full unscaled data frame (needed if a subset of the dataset was modelled)
 if(nrow(unscaled_df) != nrow(xy)) unscaled_df <- unscaled_df[as.character(unscaled_df$ID) %in% as.character(xy$ID),]
 
@@ -100,7 +89,7 @@ if(nrow(unscaled_df) != nrow(xy)) unscaled_df <- unscaled_df[as.character(unscal
   
   final.preds <- unique(unlist(strsplit(preds, ":")))
   missing.preds <- unique(final.preds)[!unique(final.preds) %in% names(seqs)]
-  seqs[,missing.preds] <- unique(xy[,missing.preds])[12,]
+  seqs[,missing.preds] <- unique(xy[,missing.preds])
   
   interactions <- preds[as.logical(stringi::stri_count_fixed(preds, ":"))]
   
@@ -175,10 +164,6 @@ assign(paste0("comb.out_", i), comb.out)
 }
 
 
-
-  
-
-
 for(i in ls(pattern = "comb.out_")){
   comb.out <- get(i)
   print(i)
@@ -186,7 +171,7 @@ for(i in ls(pattern = "comb.out_")){
   effect <- full.names[full.names[,1] == predictor,2]
   df <- data.frame(unscaled_df[, predictor])
   names(df) <- "pred"
-  
+
   plot <- (ggplot(comb.out, aes(x = pred))+
              geom_ribbon(aes(ymin = lower.out, ymax = upper.out, fill = interactor.value), alpha = .6)+
              #geom_ribbon(aes(ymin = lower.in, ymax = upper.in), alpha = .8)+
@@ -213,14 +198,44 @@ for(i in ls(pattern = "comb.out_")){
   
 
 
+scaled_transformed$obs <- as.factor(as.numeric(scaled_transformed$COUNT > 0))
+f.ranger <- as.formula("obs ~ AI + LD + TV + PI + SM + VD + WA + NA.")
+rF <- ranger(f.ranger, data = scaled_transformed, probability  = T)
+
+check <- marginal.quantiles(
+  marg.vars = seqs, 
+  effect.of = "WA", 
+  posterior.dist = dist, 
+  original.df = unscaled_df,
+  scaled.df = xy,
+  interactions = interactions, 
+  original.seqs = original.seqs,
+  silent = F,
+  formula = "AI + LD + TV + PI + SM + VD + WA + NA.",
+  interact = F,randomForest = T, rF.model = rF)
+
+out <- check
+df <- out[[3]]
+names(df) <- "pred"
+
+print(effect.plot(quantiles.i = out[[1]],
+                  quantiles.o = out[[2]],
+                  lines = out[[3]],
+                  rug = F, 
+                  with.lines = F,
+                  df = df,
+                  effect.of = out[[4]]))
+
+
+
 
 
 samples <- sample(nrow(unscaled_df), nrow(unscaled_df), replace = F)
 
-
+xy$Site <- "ZWE_MAT"
 check <- marginal.quantiles(
   marg.vars = seqs, 
-  effect.of = "TV", 
+  effect.of = "WA", 
   posterior.dist = dist, 
   original.df = unscaled_df,
   scaled.df = xy,
@@ -228,7 +243,7 @@ check <- marginal.quantiles(
   original.seqs = original.seqs,
   silent = F,
   formula = f,
-  interact = F)
+  interact = F, randomForest = F)
 
 
 out <- check
@@ -239,7 +254,7 @@ png(paste0("Z:/Plots/effect_plots/marginals/Marginal_Effect_Interaction_", out[[
 print(effect.plot(quantiles.i = out[[1]],
             quantiles.o = out[[2]],
             lines = out[[3]],
-            rug = T, 
+            rug = F, 
             with.lines = F,
             df = df,
             effect.of = out[[4]]))
