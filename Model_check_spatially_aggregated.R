@@ -350,20 +350,20 @@ segments_df$log10nono <- log10(nono)
 
 
 
-pred_enviro <- map_site(df = segments_df, o = "obs", p = "enviro", plot.what = "p", title = paste0("Prediction: ", Site), buffer.it = T, lower = F, plot.range = c(-5, 0))
+pred_enviro <- map_site(df = segments_df, o = "obs", p = "log10enviro", plot.what = "p", title = paste0("Prediction: ", Site), buffer.it = T, lower = F, plot.range = c(-5, 0))
 pdf(paste0(dropbox.file, "Master/Umweltwissenschaften/Masterarbeit/figures/pred_enviro.pdf"), onefile = T)
 pred_enviro+
   scale_fill_gradientn(colors = viridis::inferno(5), limits = c(-3, -1), na.value = viridis::inferno(5)[1])+
-  guides(fill = guide_colorbar(title = "habitat suitability"), color = F)+
+  guides(fill = guide_colorbar(title = "log10(habitat suitability)"), color = F)+
   theme(text = element_text(size = 12), axis.text.x = element_text(size = 9, angle = 30), axis.text.y = element_text(size = 9, angle = 30))+
   ggtitle("")
 dev.off()
 
-pred_anthro <- map_site(df = segments_df, o = "obs", p = "anthro", plot.what = "p", title = paste0("Prediction: ", Site), buffer.it = T, lower = F, plot.range = c(-5, 0))
+pred_anthro <- map_site(df = segments_df, o = "obs", p = "log10anthro", plot.what = "p", title = paste0("Prediction: ", Site), buffer.it = T, lower = F, plot.range = c(-5, 0))
 pdf(paste0(dropbox.file, "Master/Umweltwissenschaften/Masterarbeit/figures/pred_anthro.pdf"), onefile = T)
 pred_anthro+
   scale_fill_gradientn(colors = viridis::inferno(5), limits = c(-3, -1), na.value = viridis::inferno(5)[1])+
-  guides(fill = guide_colorbar(title = "habitat suitability"), color = F)+
+  guides(fill = guide_colorbar(title = "log10(habitat suitability)"), color = F)+
   theme(text = element_text(size = 12), axis.text.x = element_text(size = 9, angle = 30), axis.text.y = element_text(size = 9, angle = 30))+
   ggtitle("")
 dev.off()
@@ -478,14 +478,15 @@ gg$Site <- factor(gg$Site, as.character(unique(gg$Site)[order(aggregate(anthro ~
 
 pdf(paste0(dropbox.file, "Master/Umweltwissenschaften/Masterarbeit/figures/anthropogenic_effect.pdf"), width = 8, height = 3.5)
 ggplot(gg)+
-  geom_boxplot(aes(y = 100 * anthro, x = Site, fill = as.factor(PA)))+
-  scale_y_continuous("habitat suitability [%]", breaks = c(0.25, 0.5, 1, 2))+
+  geom_boxplot(aes(y = anthro, x = Site, fill = as.factor(PA)))+
+  scale_y_continuous("habitat suitability", breaks = c(0.25, 0.5, 1, 2), minor_breaks = NULL)+
   theme_bw()+
   scale_fill_manual(name="",
                     breaks=c(0, 1),
                     labels=c( "not protected", "protected"), 
                     values = c("azure3", "darkslategray4"))+
-  theme(text = element_text(size = 16), axis.text.x = element_text(angle = 30, hjust = 0.9), legend.position = "top")
+  theme(text = element_text(size = 16), axis.text.x = element_text(angle = 30, hjust = 0.9), legend.position = "top")+
+  xlab("site")
 dev.off()
 
 
