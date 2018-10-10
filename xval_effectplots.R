@@ -8,24 +8,16 @@ library(doParallel)
 library(gridExtra)
 library(ranger)
 
-#read Model output from nemo
-load("Z:/NEMO_out/output_BWA_NOR_KEN_LAI_KEN_TSV_XWA_TBC_ZWE_MAT_ZWE_ZV_ZWE_SELV_complex_binomial_nonspatial_spatial_6km_prec1e-04.RData")
 
-if(is.numeric(xy$ID)) xy$ID <- segments_new$ID
+load("Z:/NEMO_out/output_all_complex_binomial_nonspatial_spatial_xval_LOSO_6km_prec1e-04.RData")
+rm(list = ls(pattern = "nonspatial"))
 
-#select one model
-if("spatial_model" %in% ls()) that.model = spatial_model
-if(!"spatial_model" %in% ls()) that.model = get(ls(pattern = "_spatial")[1])
-
-#remove everything that is not needed
-rm(list = ls()[which(!ls() %in% c("that.model", "xy", "splines", "n.knots", "f", "output_name", "segments"))])
-#read file with GEC functions
-source("Z:/GitRepo/function_file.R")
 f <- stringi::stri_replace_all_fixed(f, "\n", "")
 #get a vector of predictors used for the model
 f <- stringi::stri_replace_all_regex(f, " ", "")
 f <- stringi::stri_replace_all_fixed(f, "+", " + ")
 f <- stringi::stri_replace_all_fixed(f, "+ f(Site,model=\"iid\") + f(PA,model=\"iid\")", "")
+f <- stringi::stri_replace_all_fixed(f, "+ Site + PA", "")
 preds <- as.vector(na.omit(stringi::stri_replace_all_fixed(strsplit(f, "+ ")[[1]], "+", NA)))
 
 #read the transformation and scale sheet
@@ -64,7 +56,7 @@ if(nrow(unscaled_df) != nrow(xy)) unscaled_df <- unscaled_df[as.character(unscal
     min <- all.mins[i]
     cov <- seqs[,i]
     check <- all_unscaled[,name]
-
+    
     cov <- cov - shift
     check <- check - shift
     
@@ -131,79 +123,85 @@ full.names <- data.frame(matrix(c("WA", "WA - distance to water [km]",
                                   "VD", "VD - Enhanced Vegtation Index"), byrow = T, nc = 2), stringsAsFactors = F)
 names(full.names) <- c("pred", "full_name")
 #full.names$full_name <- full.names$pred
-interactions
-for(iterator in seq(8)){
-  i <- c("TD", "VD", "WA", "AR", "SS", "LD", "AD", "NB")[iterator]
-  source("Z:/GitRepo/function_file.R")
-  dist <- sample.fixed.params(that.model, 10)
-  
-  check <- marginal.quantiles(
-    marg.vars = seqs, 
-    effect.of = i, 
-    posterior.dist = dist, 
-    original.df = unscaled_df,
-    scaled.df = xy,
-    interactions = interactions, 
-    original.seqs = original.seqs,
-    silent = F,
-    formula = f,
-    interact = c(T, T, T, T, T, F, T, F)[iterator])
-  
-  
-  out <- check
-  df <- out[[3]]
-  out[[5]] <- merge(out[[5]], full.names, by = "pred")
-  out[[4]] <- full.names$full_name[which(full.names$pred %in% out[[4]])]
-  names(df) <- "pred"
-  comb.out <- cbind(out[[1]][,-4], out[[2]])
-  names(comb.out) <- c("lower.in", "mid", "upper.in", "lower.out", "upper.out", "pred")
-  
-  if(c(T, T, T, T, T, F, T, F)[iterator]){
-    comb.out <- data.frame(comb.out, 
-                           interactor = rep(out[[5]]$full_name, each = 100), 
-                           interactor.value = rep(paste0(out[[5]]$pred, "_", signif(as.numeric(out[[5]]$value), 3)), each = 100))
-  }
 
+for(that.model in ls(pattern = "_spatial_model")){
   
-assign(paste0("comb.out_", i), comb.out)
+  for(iterator in seq(8)){
+    i <- c("TD", "VD", "WA", "AR", "SS", "LD", "AD", "NB")[iterator]
+    source("Z:/GitRepo/function_file.R")
+    dist <- sample.fixed.params(get(that.model), 10)
+    dist <- dist[,-c(grep("PA", colnames(dist)), grep("Site", colnames(dist)))]
+    
+    
+    check <- marginal.quantiles(
+      marg.vars = seqs, 
+      effect.of = i, 
+      posterior.dist = dist, 
+      original.df = unscaled_df,
+      scaled.df = xy,
+      interactions = interactions, 
+      original.seqs = original.seqs,
+      silent = F,
+      formula = f,
+      interact = c(T, T, T, T, T, F, T, F)[iterator])
+    
+    
+    out <- check
+    df <- out[[3]]
+    out[[5]] <- merge(out[[5]], full.names, by = "pred")
+    out[[4]] <- full.names$full_name[which(full.names$pred %in% out[[4]])]
+    names(df) <- "pred"
+    comb.out <- cbind(out[[1]][,-4], out[[2]])
+    names(comb.out) <- c("lower.in", "mid", "upper.in", "lower.out", "upper.out", "pred")
+    
+    if(c(T, T, T, T, T, F, T, F)[iterator]){
+      comb.out <- data.frame(comb.out, 
+                             interactor = rep(out[[5]]$full_name, each = 100), 
+                             interactor.value = rep(paste0(out[[5]]$pred, "_", signif(as.numeric(out[[5]]$value), 3)), each = 100))
+    }
+    
+    
+    assign(paste0(that.model, "_comb.out_", i), comb.out)
+  }
 }
 
 
-comb.out_NB$interactor <- comb.out_NB$interactor.value <- "no interaction"
-comb.out_LD$interactor <- comb.out_LD$interactor.value <- "no interaction"
-ggall <- do.call(rbind, mget(ls(pattern = "comb.out_")))
-levels(as.factor(ggall$interactor.value))
-summary(ggall)
+for(comb in ls(pattern = "_comb.out_")){
+  if(ncol(get(comb)) == 6){
+    this_comb <- get(comb)
+    this_comb$interactor <- this_comb$interactor.value <- "no interaction" 
+    assign(comb, this_comb)
+  }
+}
+
+ggall <- do.call(rbind, mget(ls(pattern = "_comb.out_")))
 
 ggall$predictor <- NA
 ggall$interactor.value <- stringi::stri_replace_all_fixed(ggall$interactor.value, "_", ": ")
+ggall$xval <- NA
 end <- 0
 start <- 1
+i = 1
 for(i in seq(length(ls(pattern = "comb.out_")))){
   rows <- nrow(get(ls(pattern = "comb.out_")[i]))
   end <- end + rows
-  ggall$predictor[start:end] <- rep(do.call(rbind, strsplit(ls(pattern = "comb.out_"), "_"))[i,2], rows)
+  ggall$predictor[start:end] <- rep(do.call(rbind, strsplit(ls(pattern = "_comb.out_"), "_"))[i,8], rows)
+  ggall$xval[start:end] <- rep(paste(do.call(rbind, strsplit(ls(pattern = "comb.out_"), "_"))[i,3:4], collapse = "_"), rows)
   start <- start + rows
 }
-table(ggall$predictor)
-nrows <- nrow(ggall)
-ggall$interactor.value <- factor(ggall$interactor.value, levels = unique(ggall$interactor.value)[c(3, 4, 8, 9, 6, 7, 10, 11, 1, 2, 5)])
-df <- unscaled_df[, c("TD", "VD", "WA", "SS", "AR", "LD", "AD", "NB")]
-pred_melt <- reshape2::melt(df)
-names(pred_melt) <- c("predictor", "mid")
-pred_melt$lower.in <- pred_melt$lower.out <- pred_melt$upper.in <- pred_melt$upper.out <- pred_melt$interactor.value <- pred_melt$interactor <- pred_melt$pred <- NA
-ggall <- rbind(ggall, pred_melt)
+
 names(full.names) <- c("predictor", "full_name")
 ggall$sort <- seq(nrow(ggall))
 ggall <- merge(ggall, full.names)
-#levels(ggall$interactor.value) <- levels(ggall$interactor.value)[c(3, 4, 8, 9, 6, 7, 10, 11, 1, 2, 5)]
-summary(ggall$full_name)
 ggall <- ggall[order(ggall$sort), ]
-pdf("C:/Users/amilles/Dropbox/Master/Umweltwissenschaften/Masterarbeit/figures/effect_plots.pdf")
-ggplot()+
-  geom_ribbon(data = ggall[1:nrows,], aes(x = pred, ymin = lower.in, ymax = upper.in, fill = interactor.value), alpha = .2)+
-  geom_line(data = ggall[1:nrows,], aes(x = pred, y = mid, col = interactor.value), size = 1)+
-  geom_rug(data = ggall[(nrows+1):nrow(ggall),], aes(x = mid), alpha = .1)+
+
+ggall$interactor.value <- factor(ggall$interactor.value, levels = unique(ggall$interactor.value)[c(3, 4, 8, 9, 6, 7, 10, 11, 1, 2, 5)])
+ggall <- ggall[ggall$xval != "AGO_Lui",]
+
+effect_plot <- ggplot(ggall, aes(x = pred, y = mid, group = paste0(xval, interactor.value)))+
+  geom_ribbon(aes(ymin = lower.in, ymax = upper.in, fill = interactor.value), alpha = .1)+
+  #geom_line(aes(color = interactor.value), size = 1)+
+  geom_line(aes(color = interactor.value), size = 1)+
   facet_wrap(~full_name, scales = "free_x")+
   scale_fill_manual(values = c("gold1", "gold4",  "brown1", "brown4", "skyblue1", "skyblue4", "springgreen1", "springgreen4", "darkorchid1", "darkorchid4", "black"))+
   scale_color_manual(values = c("gold1", "gold4",  "brown1", "brown4","skyblue1", "skyblue4", "springgreen1", "springgreen4", "darkorchid1", "darkorchid4", "black"))+
@@ -211,61 +209,14 @@ ggplot()+
   theme_bw()+
   theme(text = element_text(size = 11), legend.position = "top")+
   xlab("predictor value")+
-  guides(fill = guide_legend(title = "interaction", nrow = 2),  color = guide_legend(title = "interaction", nrow = 2))
+  guides(fill = guide_legend(title = "interaction", nrow = 2),  color = guide_legend(title = "interaction", nrow = 2), alpha = F)
+
+effect_plot
+
+
+pdf("C:/Users/amilles/Dropbox/Master/Umweltwissenschaften/Masterarbeit/figures/effect_plot_xval.pdf")
+effect_plot
 dev.off()
 
-
-for(i in seq(7)){
-  preds <- ls(pattern = "comb.out_")
-  comb.out <- get(preds[i])
-  interact <- c(F, T, F, T, T, T, F)[i]
-  
-  predictor <- strsplit(preds[i], "_")[[1]][2]
-  effect <- full.names[full.names[,1] == predictor,2]
-  df <- data.frame(unscaled_df[, predictor])
-  names(df) <- "pred"
-  
-  
-  if(interact){
-    plot <- (ggplot(comb.out, aes(x = pred))+
-               geom_ribbon(aes(ymin = lower.in, ymax = upper.in, fill = interactor.value, col = interactor.value), size = 1.5, alpha = .6)+
-               #geom_ribbon(aes(ymin = lower.in, ymax = upper.in), alpha = .8)+
-               geom_line(aes(y = mid, col = interactor.value, group = interactor.value))+
-               scale_fill_manual(values = RColorBrewer::brewer.pal(length(unique(comb.out$interactor.value)), "Paired"))+
-               scale_color_manual(values = RColorBrewer::brewer.pal(length(unique(comb.out$interactor.value)), "Paired"))+
-               geom_point(data = df, aes(x = pred, y = 0), shape = "|", alpha = 0.05)+
-               facet_wrap(~ interactor, scales = "free")+
-               xlab(effect)+
-               ylab("Habitat Suitability")+
-               theme_classic()+
-               guides(fill = guide_legend(title = "interaction value"), color = F, alpha = F, shape = F)+
-               theme(text = element_text(size = 14), legend.position = "top"))
-    
-    #print(plot)
-    
-    png(paste0("Z:/Plots/effect_plots/marginals/Marginal_Effect_Interaction_", predictor,"_", output_name, ".png"), height = 900, width = 500 * length(unique(comb.out$interactor)))
-    print(plot)
-    dev.off()
-  }
-  
-  if(!interact){
-    plot <- 
-      ggplot(comb.out, aes(x = pred))+
-      geom_ribbon(aes(ymin = lower.in, ymax = upper.in), fill = "coral", size = 1.5)+
-      geom_line(aes(x = pred, y = mid), col = "black")+
-      geom_point(data = df, aes(x = pred, y = 0), shape = "|", alpha = 0.05)+
-      xlab(effect)+
-      ylab("Habitat Suitability")+
-      theme_classic()+
-      guides(fill = guide_legend(title = "interaction value"), color = F, alpha = F, shape = F)+
-      theme(text = element_text(size = 14))
-    
-    #print(plot)
-    
-    png(paste0("Z:/Plots/effect_plots/marginals/Marginal_Effect_Interaction_", predictor,"_", output_name, ".png"), height = 500, width = 500)
-    print(plot)
-    dev.off()
-  }
-  
-  
-}
+which.max(ggall$lower.in)
+ggall[1801,]

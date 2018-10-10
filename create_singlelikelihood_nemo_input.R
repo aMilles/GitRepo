@@ -1,22 +1,24 @@
 library(spdep)
 library(INLA)
 
-
-
 rm(list = ls()[which(ls() != "segments")])
 if(!"segments" %in% ls()) segments <- rgdal::readOGR("Z:/GEC/segments.shp")
 xy <- read.csv("C:/Users/amilles/Dropbox/modelling/yxtable_scaled_transformed.csv")[,-c(1)]
+xy <- read.csv("C:/Users/amilles/Dropbox/modelling/yxtable.csv")[,-c(1)]
+2291/sum(aggregate(COUNT ~ Site, xy[xy$COUNT > 0,], function(x) sum(x > 0))$COUNT)
+cbind(aggregate(SS ~ Site, xy[xy$COUNT > 0,], median),
+aggregate(SS ~ Site, xy[xy$COUNT == 0,], median)[,2])
 
 #xy <- read.csv("Z:/modelling/yxtable.csv")[,-c(1)]
 #create setup
 transformed = T
 model.type = "complex"
 model.family = "binomial"
-selection = c("all") #ISO3 Country Code or "all" if non selection should be made, Site Codes if sites are selected ("ZWE_MAT") c("BWA_NOR", "KEN_LAI", "KEN_TSV", "XWA_TBC", "ZWE_MAT", "ZWE_ZV", "ZWE_SELV")
+selection = c("BWA_NOR", "KEN_LAI", "KEN_TSV", "XWA_TBC", "ZWE_MAT", "ZWE_ZV", "ZWE_SELV") #ISO3 Country Code or "all" if non selection should be made, Site Codes if sites are selected ("ZWE_MAT") c("BWA_NOR", "KEN_LAI", "KEN_TSV", "XWA_TBC", "ZWE_MAT", "ZWE_ZV", "ZWE_SELV")
 selection.level = "Site" #"Country" or "Site"
-nb_dist = 5000 #maximum distance considered as a neighbor [m]
+nb_dist = 6000 #maximum distance considered as a neighbor [m]
 xval = F #prepare data for cross validation
-xval.type = "LSO" #LSO = leave some out, LOSO = leave one site out, KOSI = keep one site in
+xval.type = "LOSO" #LSO = leave some out, LOSO = leave one site out, KOSI = keep one site in
 LSO.folds = 10 #number of folds
 splines = NA #transform these predictors to splines c("WA", "VD", "AD", "LD", "TV", "SS")
 n.knots = 2 #number of knots per spline per predictor
@@ -24,19 +26,17 @@ ridge = F #ridge regression
 precision = 1e-4 #1e-4 is default
 weight = F #add weights
 
-
-
 output_name <- paste0(paste0(selection, collapse = "_"), "_", model.type, "_", model.family, "_nonspatial_spatial_", ifelse(xval, paste0("xval_", xval.type, "_"), ""), nb_dist/1000, "km", ifelse(all(is.na(splines)), "", "_splines"), ifelse(ridge, "_ridge", paste0("_prec",precision)), ifelse(!transformed, "_nottransformed", ""), ".RData")
 source("Z:/GitRepo/function_file.R")
 
 # define simple/complex formula and spatial model
 {
   if(model.type == "complex"){
-    f <- "AD + TV + AR + LD + NB + VD + WA + SS + HD + SC:WA + TC:WA + TC:TD + TV:SM + LD:VD + PA:AR + TD:AR + SC:SS + TD:VD + SC:TD + PA + f(Site, model = \"iid\")"
+    f <- "AD + NB + AR + LD + VD + I(VD^2) + WA + SS + I(SS^2) + TD + I(TD^2) + SC:WA + TC:WA + TC:TD + LD:VD + HD:AR + HD:AD + TD:AR + SC:SS + SC:TD + f(Site ,model=\"iid\") + f(PA ,model=\"iid\")"
     for(spline in splines) f <- stringi::stri_replace_all_regex(f, paste0(" ", spline, " "), paste0(spline, seq(n.knots), collapse = " + "))
     
   }
-  
+
   if(model.type == "simple"){
     f <- "LD + NB + SC + VD + WA"
     for(spline in splines) f <- stringi::stri_replace_all_regex(f, paste0(" ", paste0(" ", spline, " ")), paste0(spline, seq(n.knots), collapse = " + "))
@@ -74,12 +74,11 @@ for(i in c("ID", "CC", "HT", "PA", "Site", "Country", "Transect")){
 if(!all(is.na(splines))){
   for(spline in splines){
     splined <- data.frame(spliner(xy[,match(spline, names(xy))], n.knots))
-    for(i in ncol(splined))  splined[,i] <- scale(splined[,i])
+    for(i in seq(ncol(splined)))  splined[,i] <- scale(splined[,i])
     names(splined) <- paste0(spline, seq(n.knots))
     xy <- cbind(xy, splined)
   }
 }
-
 
 
 #create the neighborhood
@@ -125,4 +124,10 @@ for(block in ls(pattern = "^xy_without_")) plot(is.na(get(block)$obs), pch = "|"
 {
   save(list = ls()[!ls() %in% c("segments", "metric_segs")], file = paste0("Z:/NEMO_in/input_", output_name))
 }
+
+summary(dinla)
+f.nonspatial
+f.spatial
+inla.fun(x = xy[1:10,], formula = f.nonspatial, precision = precision, family = model.family, ridge = ridge)
+
 

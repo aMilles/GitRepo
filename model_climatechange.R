@@ -37,9 +37,6 @@ IMAGE$Site <- xy$Site[match(as.character(xy$ID), as.character(IMAGE$ID))]
 IMAGE$year <- rep(as.factor(c(2015, 2100)), each = nrow(IMAGE)/2)
 mIMAGE <- melt(IMAGE[,c("aridity", "leaves2100", "npp", "Site", "year")], id.vars = c("year", "Site"))
 
-IMAGE[1,]
-IMAGE[(nrow(IMAGE)/2) + 1,]
-
 
 gg <- ggplot(mIMAGE, aes(x = year, y = value))+
   geom_boxplot()+

@@ -21,8 +21,8 @@ if(!"buffer" %in% ls()) buffer <- readOGR("Z:/GEC/buffered_segments.shp")
 #source("https://raw.githubusercontent.com/aMilles/GitRepo/master/function_file.R")
 source("Z:/GitRepo/function_file.R")
 
-load("Z:/NEMO_out/output_ZWE_MAT_ZWE_ZV_ZWE_SELV_ZWE_SEB_complex_binomial_nonspatial_spatial_xval_LSO_5km_prec1e-04.RData")
-
+#load("Z:/NEMO_out/output_ZWE_MAT_ZWE_ZV_ZWE_SELV_ZWE_SEB_complex_binomial_nonspatial_spatial_xval_LSO_5km_prec1e-04.RData")
+load("Z:/NEMO_out/output_all_complex_binomial_nonspatial_spatial_6km_prec1e-04.RData")
 dropbox.file = "C:/Users/amilles/Dropbox/"
 xy_backup <- xy
 #replace scaled and transformed xy values with original values
@@ -75,20 +75,18 @@ if(!xval){
 }
 
 
-f.inla <- paste0(stringi::stri_replace_all_fixed(f,  "+ f(Site, model = \"iid\")", ""))
+f.inla <- paste0(stringi::stri_replace_all_fixed(f,  "+ f(Site ,model=\"iid\") + f(PA ,model=\"iid\")", ""))
 f.ranger <- paste0("as.factor(obs) ~ ", paste(unique(strsplit(stringi::stri_replace_all_fixed(stringi::stri_replace_all_fixed(f.inla, ":", " "), "+ ", ""), " ")[[1]]), collapse = " + "))
-segments_df$Block <- as.factor(xy$Site)
+
 
 rF_preds <-  NULL
-
+if(all(is.na(xy$Block))) xy$Block <- xy$Site
 for(block in unique(xy$Block)){
   rows = which(xy$Block == block)
   rF <- ranger::ranger(f.ranger, xy[-rows,], probability = T, importance = "impurity")
   p <- predict(rF, data = xy[rows,])$predictions[,1]
   rF_preds <- append(rF_preds, p)
 }
-
-hist(xy[-rows,]$obs - rF$predictions[,1])
 
 xy$rF_preds <- rF_preds
 
@@ -111,7 +109,6 @@ for(i in c("spatial_pred", "nonspatial_pred", "rF_preds")){
 if(!output_name %in% fit_summary$dataset) fit_summary<- rbind(fit_summary, c(output_name, Efrons, as.character(f.nonspatial)[3]))
 write.csv(fit_summary,"Z:/residual_analysis/summary.csv")
 
-spatial_model$summary.fixed
 #Fit by Site
 out <- NULL
 for(i in c("spatial_pred", "nonspatial_pred")){
@@ -132,7 +129,7 @@ ggplot(fit.df, aes(x = detection_ratio, y = `effron's R-squared`, group = model,
 
 
 ggfit <- ggplot(fit.df[fit.df$model == "spatial",], aes(x = detection_ratio, y = `effron's R-squared`))+
-  geom_label(aes(label = site),position=position_jitter(width=0.0,height=.1), label.size = 0, alpha = 0)+
+  geom_label(aes(label = site), position=position_jitter(width=0.0,height=.1), label.size = 0, alpha = 0)+
   geom_point(size = 5, shape = "+", col = "firebrick")+
   xlab("ratio of detections per subunit")+
   theme_bw()+
@@ -150,7 +147,7 @@ predictors <- data.frame("predictor" = rep(row.names(nonspatial_summary[[1]]), l
            "value" = summaries$X0.5quant,
            "lower" = summaries$X0.975quant,
            "spatial" = rep(c("non-spatial", "spatial"), each = nrow(spatial_summary[[1]]) * length(ls(pattern = "nonspatial_model$"))),
-           "Site" = rep(pred.site.names, each = nrow(spatial_summary[[1]])))
+           "Site" = rep(c("nonspatial", "spatial"), each = nrow(spatial_summary[[1]])))
 
 (summary.plot <- 
   ggplot(predictors, aes(x = predictor, y = value, col = Site, ymax = upper, ymin = lower))+
@@ -161,10 +158,9 @@ predictors <- data.frame("predictor" = rep(row.names(nonspatial_summary[[1]]), l
     ylim(c(-2, 2)))
 
 
-
 tf_sheet <- read.csv("C:/Users/amilles/Dropbox/modelling/transform_sheet.csv")
 reverse <- tf_sheet$name[tf_sheet$value < 0]
-
+reverse
 for(pred in reverse){
   rows <- (stringi::stri_count_regex(as.character(predictors$predictor), pred)) > 0
     predictors[rows, c(2:4)] <- predictors[rows, c(2:4)] * -1
@@ -185,149 +181,311 @@ pdf(paste0("C:/Users/amilles/Dropbox/Master/Umweltwissenschaften/Masterarbeit/fi
 dev.off()
 
 
-# Spatial analysis
+##################################################################
+################### SPATIAL PREDICTIONS ##########################
+##################################################################
+
 #add observations and predictions to the segments
 matchs <- match(as.character(xy$ID), as.character(segments$ID))
-summary(matchs)
 segments_CC <- segments_new
 segments_CC$SC <- NULL
-  #segments[match(as.character(xy$ID), as.character(segments$ID)),]
-
 segs <- segments_CC
 segs_cent <- geosphere::centroid(segs)
 segs <- cbind(long = segs_cent[,1], lat = segs_cent[,2], data.frame(segs))
 segments_df <- cbind(data.frame(segs_cent), xy, data.frame(segments_CC))
+segments_df$Block <- as.factor(xy$Site)
 names(segments_df)[c(1,2)] <- c("long", "lat") 
-
-#create spatial correlogram
-spatial_dep <- segments_df
-spatial_dep <- subset(spatial_dep, Site == "ZWE_MAT")
-spatial_dep_non_spatial_m <- ncf::correlog(x = spatial_dep$long, y = spatial_dep$lat, z = spatial_dep$nonspatial_pred - spatial_dep$obs, increment = 5, resamp = 2, latlon = T)
-spatial_dep_spatial_m <- ncf::correlog(x = spatial_dep$long, y = spatial_dep$lat, z = spatial_dep$spatial_pred - spatial_dep$obs, increment = 5, resamp = 2, latlon = T)
-
 
 source("Z:/GitRepo/function_file.R")
 
 
 #save those plots in one pdf
 
-hist(segments_df$rF_pred)
-summary(segments_df$rF_pred)
+### PREDICTIONS WITH RANDOM EFFECTS (SPATIAL AND NON-SPATIAL) ####
+
+#spatial
+
 segments_df$prediction_log10 <- log10(segments_df$spatial_pred)
-pdf(paste0(dropbox.file, "Master/Umweltwissenschaften/Masterarbeit/figures/", output_name, "predictions_rF.pdf"), onefile = T)
-for(Site in as.character(unique(segments_df$Site))){
- print(
-   map <- map_site(df = segments_df[segments_df$Site == Site,], o = "obs", p = "rF_preds", plot.what = "p", title = paste0("Prediction: ", Site), buffer.it = T, lower = F, plot.range = c(-0.01, 1)) +
-     geom_point(data = segments_df[segments_df$obs == 1 & segments_df$Site == Site, c("long", "lat", "Block")], aes(x = long, y = lat), shape = "+")+
-     guides(fill = guide_colorbar(title = "Habitat Suitability"))+
-     ggtitle("")+
-     theme(text = element_text(size = 14))
-   )
-}
+segments_df$prediction_log10nsp <- log10(segments_df$nonspatial_pred)
+
+pred_map <- map_site(df = segments_df, o = "obs", p = "prediction_log10", plot.what = "p", title = paste0("Prediction: ", Site), buffer.it = T, lower = F, plot.range = c(-5, 0))
+
+pred_map2 <- pred_map+
+  scale_fill_gradientn(colors = viridis::inferno(5, end = 0.75), limits = c(-4, 0.1), na.value = viridis::inferno(5, end = 0.75)[1])+
+  guides(fill = guide_colorbar(title = "habitat suitability (log10)"), color = F)+
+  geom_point(data = segments_df[segments_df$obs == 1, c("long", "lat", "Block", "prediction_log10")], aes(x = long, y = lat), shape = "O", size = 0.01, fill = "black", color = "white")+
+  theme(text = element_text(size = 12), axis.text.x = element_text(size = 9, angle = 30), axis.text.y = element_text(size = 9, angle = 30), panel.background = element_rect(color = "gray50"), plot.background = element_rect(color = "gray50"))+
+  ggtitle("")
+
+pdf(paste0(dropbox.file, "Master/Umweltwissenschaften/Masterarbeit/figures/predictions_spatial_model.pdf"), onefile = T)
+pred_map2
+dev.off()
+
+#non-spatial
+
+pred_mapnsp <- map_site(df = segments_df, o = "obs", p = "prediction_log10nsp", plot.what = "p", title = paste0("Prediction: ", Site), buffer.it = T, lower = F, plot.range = c(-5, 0))
+
+pred_map2nsp <- pred_mapnsp+
+  scale_fill_gradientn(colors = viridis::inferno(5, end = 1), limits = c(-4, 0.1), na.value = viridis::inferno(5, end = 1)[1])+
+  guides(fill = guide_colorbar(title = "habitat suitability (log10)"), color = F)+
+  geom_point(data = segments_df[segments_df$obs == 1, c("long", "lat", "Block", "prediction_log10nsp")], aes(x = long, y = lat), shape = "O", size = 0.01, fill = "black", color = "white")+
+  theme(text = element_text(size = 12), axis.text.x = element_text(size = 9, angle = 30), axis.text.y = element_text(size = 9, angle = 30), panel.background = element_rect(color = "gray50"), plot.background = element_rect(color = "gray50"))+
+  ggtitle("")
+
+pdf(paste0(dropbox.file, "Master/Umweltwissenschaften/Masterarbeit/figures/predictions_spatial_model.pdf"), onefile = T)
+pred_map2nsp
 dev.off()
 
 
+### PREDICT WITHOUT RANDOM EFFECTS ####
 
 
-samples <- t(as.matrix(sample.fixed.params(xy_without_block10_spatial_model, nsample = 100)))
+if(!"df_backup" %in% ls()) df_backup <- segments_df
+df_backup -> segments_df
+
+segments_df$Block <- xy$Site 
+samples <- t(as.matrix(sample.fixed.params(spatial_model, nsample = 100)))
+
+
+# PREDICT HS AT THE TIMES OF OBSERVATIONS
+
+xy.pred <- xy_backup
+m <- model.matrix(as.formula(paste0("obs ~", f.inla)), xy.pred)
+inla.pred <- invlogit(m %*% samples)
+inla.pred <- apply(data.frame(inla.pred), 1, median)
+segments_df$inla.pred <- inla.pred
+segments_df$log10inla.pred <- log10(inla.pred)
+
+
+segments_df <- merge(segments_df, setNames(aggregate(obs ~ Site, xy, sum), c("Block", "detection_sum")))
+names(segments_df)
+inla.pred.map <- map_site(df = segments_df, o = "obs", p = "log10inla.pred", plot.what = "p", title = paste0("Prediction: ", Site), buffer.it = T, lower = F, plot.range = c(-5, 0))
+ 
+ pdf(paste0(dropbox.file, "Master/Umweltwissenschaften/Masterarbeit/figures/Map_nonspatial_pred.pdf"))
+ inla.pred.map +
+   scale_fill_gradientn(colors = viridis::inferno(5, end = 0.75), limits = c(-4, -1), na.value = viridis::inferno(5, end = 0.75)[1])+
+   geom_point(data = segments_df[segments_df$obs == 1, c("long", "lat", "Block", "inla.pred", "detection_sum")], aes(x = long, y = lat, size = 1/(detection_sum), alpha = 1/detection_sum^3), fill = "black", color = "gray90", shape = 3)+
+   scale_size_continuous(range = c(0.0000001, 2))+
+   scale_alpha_continuous(range = c(0.3,1))+
+   guides(fill = guide_colorbar(title = "log10(habitat suitability)"), color = F, size = F, alpha = F)+
+   theme(text = element_text(size = 10), axis.text.x = element_text(size = 9, angle = 30), axis.text.y = element_text(size = 9, angle = 30), panel.background = element_rect(color = "gray50"), plot.background = element_rect(color = "gray50"))+
+   ggtitle("")
+
+dev.off()
+###predict at the time of minimum HS  
+
 xy.m <- xy_backup
-xy.m$Site[] <- "ZWE_MAT"
-m <- model.matrix(as.formula(paste0("obs ~", f.inla)), xy_backup)
-prob <- invlogit(m %*% samples)
-prob <- apply(data.frame(prob), 1, median)
+xy.m$Block <- NULL
 
-segments_df$prediction_log10 <- log10(segments_df$spatial_pred_xy_without_ZWE_SELV)
-segments_df$inla.pred <- prob 
+#read predictors at the time of minimum HS and replace them
+xy_season <- read.csv(paste0(dropbox.file, "modelling/xytable_minHS.csv"))
+all(as.character(xy_season$ID) == as.character(xy.m$ID))
+xy.m[, c("VD","WA","TC", "SC")] <- xy_season[match(as.character(xy.m$ID), as.character(xy_season$ID)), c("VD","WA","TC", "SC")]
+xy_season <- na.omit(xy.m)
 
-all.map <- map_site(df = segments_df, o = "obs", p = "inla.pred", plot.what = "p", title = paste0("Prediction: ", Site), buffer.it = T, lower = F, plot.range = c(-0.01, 1))+
-  geom_point(data = segments_df[segments_df$obs == 1, c("long", "lat", "Block")], aes(x = long, y = lat), shape = 20, col = "white", fill = "black", alpha = 0.8, size = .5)+
-  guides(fill = guide_colorbar(title = "Habitat Suitability"))+
-  scale_fill_gradientn(colors = viridis::cividis(5))+
-  ggtitle("")+
-  theme(text = element_text(size = 14))
+#there were some more NAs in the seasonal dataset
+segments_df <- segments_df[na.omit(match(as.character(xy_season$ID), as.character(segments_df$ID))), ]
 
-pdf(paste0(dropbox.file, "Master/Umweltwissenschaften/Masterarbeit/figures/", output_name, "all_predictions_nositeeffect.pdf"), onefile = T)
-all.map
+# create predictions
+
+xy.minHS <- xy_season
+m <- model.matrix(as.formula(paste0("obs ~", f.inla)), xy.minHS)
+minHSprob <- invlogit(m %*% samples)
+minHSprob <- apply(data.frame(minHSprob), 1, median)
+segments_df$minHSprob <- minHSprob
+segments_df$log10minHSprob <- log10(minHSprob)
+
+pred_minHS_minHS_map <- map_site(df = segments_df, o = "obs", p = "log10minHSprob", plot.what = "p", title = paste0("Prediction: ", Site), buffer.it = T, lower = F, plot.range = c(-5, 0))
+pdf(paste0(dropbox.file, "Master/Umweltwissenschaften/Masterarbeit/figures/Map_noLD.pdf"), onefile = T)
+pred_minHS_minHS_map+
+  scale_fill_gradientn(colors = viridis::inferno(5, end = 0.75), limits = c(-4, -1), na.value = viridis::inferno(5, end = 0.75)[1])+
+  guides(fill = guide_colorbar(title = "log10(habitat suitability)"), color = F)+
+  theme(text = element_text(size = 10), axis.text.x = element_text(size = 9, angle = 30), axis.text.y = element_text(size = 9, angle = 30))+
+  ggtitle("")
+dev.off()
+
+
+#generate a scenario with environmental effects set to the same level
+xy.anthro <- xy_season
+xy.anthro$TD[] <-  0
+xy.anthro$VD[] <-  0
+xy.anthro$WA[] <-  0
+xy.anthro$SS[] <- 0
+xy.anthro$NB[] <- 0
+m <- model.matrix(as.formula(paste0("obs ~", f.inla)), xy.anthro)
+anthro <- invlogit(m %*% samples)
+anthro <- apply(data.frame(anthro), 1, median)
+segments_df$anthro <- anthro
+segments_df$log10anthro <- log10(anthro)
+
+
+#generate a scenario with anthropogenic effects set to the same level
+xy.enviro <- xy_season
+xy.enviro$HD <- 0
+xy.enviro$LD <- 0
+xy.enviro$AD <- 0
+xy.enviro$AR <- 0
+m <- model.matrix(as.formula(paste0("obs ~", f.inla)), xy.enviro)
+enviro <- invlogit(m %*% samples)
+enviro <- apply(data.frame(enviro), 1, median)
+segments_df$enviro <- enviro
+segments_df$log10enviro <- log10(enviro)
+
+
+xy.nono <- xy_season
+xy.nono$HD <- min(xy.nono$HD)
+xy.nono$LD <- min(xy.nono$LD)
+xy.nono$AD <- min(xy.nono$AD)
+xy.nono$AR <- min(xy.nono$AR)
+xy.nono$SS[] <- 0
+xy.nono$NB[] <- 0
+xy.nono$TD[] <-  0
+xy.nono$VD[] <-  0
+xy.nono$WA[] <-  0
+m <- model.matrix(as.formula(paste0("obs ~", f.inla)), xy.nono)
+nono <- invlogit(m %*% samples)
+nono <- apply(data.frame(nono), 1, median)
+segments_df$nono <- nono
+segments_df$log10nono <- log10(nono)
+
+
+
+pred_enviro <- map_site(df = segments_df, o = "obs", p = "enviro", plot.what = "p", title = paste0("Prediction: ", Site), buffer.it = T, lower = F, plot.range = c(-5, 0))
+pdf(paste0(dropbox.file, "Master/Umweltwissenschaften/Masterarbeit/figures/pred_enviro.pdf"), onefile = T)
+pred_enviro+
+  scale_fill_gradientn(colors = viridis::inferno(5), limits = c(-3, -1), na.value = viridis::inferno(5)[1])+
+  guides(fill = guide_colorbar(title = "habitat suitability"), color = F)+
+  theme(text = element_text(size = 12), axis.text.x = element_text(size = 9, angle = 30), axis.text.y = element_text(size = 9, angle = 30))+
+  ggtitle("")
+dev.off()
+
+pred_anthro <- map_site(df = segments_df, o = "obs", p = "anthro", plot.what = "p", title = paste0("Prediction: ", Site), buffer.it = T, lower = F, plot.range = c(-5, 0))
+pdf(paste0(dropbox.file, "Master/Umweltwissenschaften/Masterarbeit/figures/pred_anthro.pdf"), onefile = T)
+pred_anthro+
+  scale_fill_gradientn(colors = viridis::inferno(5), limits = c(-3, -1), na.value = viridis::inferno(5)[1])+
+  guides(fill = guide_colorbar(title = "habitat suitability"), color = F)+
+  theme(text = element_text(size = 12), axis.text.x = element_text(size = 9, angle = 30), axis.text.y = element_text(size = 9, angle = 30))+
+  ggtitle("")
 dev.off()
 
 
 
-map.preds <- c("AD", "LD", "TV", "AR", "SM", "VD", "WA", "SS", "SC", "TC", "SL")
+#### aggreagte LAND USE CHANGE ####
+comp.LUCCdf <- segments_df[, c("enviro", "PA", "Site", "sampef")]
+check <- aggregate(LUCC_perc ~ Site, FUN = spatstat::weighted.median, w = 1/comp.LUCCdf$sampef,  data = comp.LUCCdf)
+#comp.LUCC <- aggregate(LUCC_perc ~ PA + Site, FUN = spatstat::weighted.median, w = 1/comp.LUCCdf$sampef, data = comp.LUCCdf)
+comp.LUCC <- aggregate(LUCC_perc ~ PA + Site, FUN = median, data = comp.LUCCdf)
+names(comp.LUCC) <- c("PA", "Site", "LUCC_perc")
 
-for(i in seq(10)) dev.off()
-{
-  pdf(file = paste0("Z:/residual_analysis/",tools::file_path_sans_ext(output_name), ".pdf"), onefile = T,paper = "a4", width = 8.27, height = 11.69)
-    for(predictor in map.preds){
-      print(map_site(df = segments_df, o = "obs", p = predictor, plot.what = "p", title = predictor, lower = F, plot.range = range(segments_df[, predictor]))+
-              geom_point(data = segments_df[segments_df$obs == 1, c("long", "lat", "Block")], aes(x = long, y = lat), shape = "+"))
-    }
-  dev.off()
+comp.LUCC$Site <- factor(comp.LUCC$Site, levels = check$Site[order(check$LUCC_perc)])
+
+pdf(paste0(dropbox.file, "Master/Umweltwissenschaften/Masterarbeit/figures/change_habitatsuitability.pdf"), onefile = T)
+ggplot(comp.LUCC, aes(x = Site, y = LUCC_perc, fill = as.factor(PA)))+
+  geom_bar(stat="identity",position="dodge")+
+  coord_flip()+
+  scale_fill_manual(name="",
+                      breaks=c(0, 1),
+                      labels=c( "not protected", "protected"), 
+                      values = c("azure3", "darkslategray4"))+
+  theme_bw()+
+  ylab("median change of habitat suitability [%]")+
+  xlab("")+
+  theme(legend.position = "top", text = element_text(size = 20), panel.grid.major.y = element_line(size = 1, colour = c("gray90")), panel.grid.minor.x = element_blank(), panel.grid.major.x = element_blank())
+dev.off()
+
+a <- map_site(df = segments_df, o = "obs", p = "LUCC_perc", plot.what = "p", title = paste0("Prediction: ", Site), buffer.it = T, lower = F, plot.range = c(-5, 0))+
+  scale_fill_gradientn(colors = viridis::inferno(5), limits = c(-60, 5), na.value = viridis::inferno(5)[1])+
+  guides(fill = guide_colorbar(title = "change in habitat suitability [%]"))+
+  theme(text = element_text(size = 12), axis.text.x = element_text(size = 9, angle = 30), axis.text.y = element_text(size = 9, angle = 30))+
+  ggtitle("")
+  
+a+
+  scale_fill_gradientn(colors = viridis::inferno(5), limits = c(-60, 5), na.value = viridis::inferno(5)[1])+
+  guides(fill = guide_colorbar(title = "change in habitat suitability [%]"))+
+  theme(text = element_text(size = 12), axis.text.x = element_text(size = 9, angle = 30), axis.text.y = element_text(size = 9, angle = 30))+
+  ggtitle("")
+#### Sensitivity / Elasticity ####
+full.names <- data.frame(matrix(c("WA", "WA - distance to water [km]",
+                                  "AD", "AD - agricultural density [%]",
+                                  "HD", "HD - human density [people/km²]",
+                                  "LD", "LD - livestock density [TLU/km²]",
+                                  "AR", "AR - accessibility from roads [h]",
+                                  "VD", "VD - Enhanced Vegtation Index"), byrow = T, nc = 2), stringsAsFactors = F)
+names(full.names) <- c("predictor", "full_name")
+
+vary.pred <- function(df, predictor, change, formula, posterior){
+  tf_sheet <- read.csv("C:/Users/amilles/Dropbox/modelling/transform_sheet.csv", stringsAsFactors = F)
+  scale_sheet <- read.csv("C:/Users/amilles/Dropbox/modelling/scale_sheet.csv", stringsAsFactors = F)
+  
+  bt_value <- tf_sheet$value[tf_sheet$name == predictor]
+  shift <- tf_sheet$shift[tf_sheet$name == predictor]
+   
+  scale <- scale_sheet$scale[scale_sheet$name == predictor]
+  center <- scale_sheet$center[scale_sheet$name == predictor]
+  
+  par(mfrow = c(3,1))
+  cov <- df[,predictor]
+  changer <- (((cov * scale + center)^(1/bt_value)) + shift) * change
+  hist(changer, main = predictor)
+  boxplot(changer ~ df$Site)
+  changer <- (((changer - shift)^bt_value) - center) / scale
+  hist(changer, main = predictor)
+  df[, predictor] <- changer
+  m <- model.matrix(as.formula(paste0("obs ~", formula)), df)
+  prob <- apply(data.frame(invlogit(m %*% posterior)), 1, function(x) median(x, na.rm = T))
+  return(prob)
 }
-
-#plot all covariates
-for(i in seq(10)) dev.off()
-{
-  pdf(file = paste0("Z:/residual_analysis/", selection, "_predictors.pdf"), onefile = T,paper = "a4", width = 8.27, height = 11.69)
-  
-  for(pred in names(segments_df[,3:21])[which(!names(segments_df[,3:21]) %in% c("ID", "CC", "COUNT", "HT", "PA", "Site", "Transect", "Country"))]){
-    map_site(df = segments_df, o = "obs", p = pred, plot.what = "p", title = pred)
-  }
-  
-  dev.off() 
-}
+sampling.effort <- read.csv(paste0(dropbox.file, "modelling/sampling_effort.csv"), row.names = 1)
+segments_df$sampef <- sampling.effort[match(segments_df$ID, sampling.effort$ID), 2]
 
 
-#simple "effect" plots
-gg.xy <- cbind(xy_without_ZWE_MAT[, rev(strsplit(f, " +")[[1]][-seq(2, length(strsplit(f, " +")[[1]]), 2)])[-1]], xy[,c("obs", "nonspatial_pred", "spatial_pred")])
-gg.xy <- reshape2::melt(gg.xy, id.vars = c("nonspatial_pred", "spatial_pred", "obs"))
+samples <- t(as.matrix(sample.fixed.params(spatial_model, nsample = 50)))
+preds <- c("WA", "VD", "AR", "LD", "AD")
+change <- c(1.1, 1.1, .9, 1.1, 1.1, 1.1)
+dir <- rep(c("up"), length(preds))
+out <- vector("list", length(preds))
+for(pred in seq(length(preds))) out[[pred]] <- vary.pred(df = xy_season, predictor = preds[pred], change = change[pred], formula = f.inla, posterior = samples)
 
-  ggplot(gg.xy, aes(x = value, y = obs))+
-    geom_smooth()+
-    facet_wrap(~variable, scales = "free")
+ref <- vary.pred(df = xy_season, predictor = preds[pred], change = 1, formula = f.inla, posterior = samples)
+change <- data.frame(prob = 100 *(do.call(c, out) - ref)/ref, predictor =  rep(preds, each = nrow(xy_season)), direction = "up", site = xy_season$Site)
+aggchange <- aggregate(prob ~ predictor + site, FUN = spatstat::weighted.median, w = 1/segments_df$sampef, data = change)
+aggchange <- merge(aggchange, full.names)
 
-  
-#elaborated effect plots  
-  if(effect){
-    tf_sheet <- read.csv("Z:/modelling/transform_sheet.csv", stringsAsFactors = F)
-    scale_sheet <- read.csv("Z:/modelling/scale_sheet.csv", stringsAsFactors = F)
-    tf_sheet$name[is.na(tf_sheet$name)] <- "NA." -> scale_sheet$name[is.na(scale_sheet$name)]
-    #scale_sheet$name <- tf_sheet$name
-    df <- read.csv("Z:/modelling/yxtable_scaled_transformed.csv")
-    names(df)
-    bt_mins <- us_mins <- mins <- apply(df[,tf_sheet$name], 1, min)
-    bt_maxs <- us_maxs <- maxs <- apply(df[,tf_sheet$name], 1, max)
-    for(i in length(mins)){
-      us_mins[i] <- mins[i] * scale_sheet$scale[i] + scale_sheet$center[i]
-      us_maxs[i] <- maxs[i] * scale_sheet$scale[i] + scale_sheet$center[i]
-    }
-    
-  }  
+weird <- scales::trans_new("signed_log",
+                           transform=function(x) sign(x)*log10(abs(x)),
+                           inverse=function(x) sign(x)*(10^abs(x)))
+aggchange
+pdf(paste0(dropbox.file, "Master/Umweltwissenschaften/Masterarbeit/figures/change_habitatsuitability_elasticity.pdf"), onefile = T)
+ggplot(aggchange, aes(y = prob, x = site, fill = prob > 0))+
+  geom_abline(intercept = 0, slope = 0)+
+  geom_bar(stat="identity",position="dodge", color = "black")+
+  facet_wrap(~full_name, scales = "free_y", nrow = 6)+
+  scale_fill_manual(name="",
+                    breaks=c(0, 1),
+                    labels=c( "", ""), 
+                    values = c("gray90", "gray50"))+
+  theme_bw()+
+  ylab("median change of habitat suitability [%]")+
+  xlab("site")+
+  theme(legend.position = "none", text = element_text(size = 14), panel.grid.major.y = element_line(size = .1, colour = "darkgray"), panel.grid.minor.x = element_blank(), panel.grid.major.x = element_blank(), axis.text.x = element_text(angle = 30, hjust = .9))
+dev.off()
 
 
-  
-  
-  sample.fixed.params <- function(model = model_test, nsample = 10000, param = "") {
-    params <- names(model$marginals.fixed)
-    which.param <- grep(param, params)
-    
-    if(sum(which.param)==0) stop("Check parameter names")
-    dist <- matrix(ncol = length(which.param), nrow = nsample)
-    for(i in 1:NROW(which.param)) {
-      dist[,i] <- sample(model$marginals.fixed[[which.param[i]]][,1], nsample, TRUE,
-                         model$marginals.fixed[[which.param[i]]][,2])
-      
-    } 
-    return(dist)
-  }
-  sample.fix  
+gg <- data.frame(rbind(segments_df[, c("Site", "nono", "anthro")], setNames(segments_df[, c("Site", "nono", "enviro")], c("Site", "nono", "anthro"))), conditions = rep(c("anthropogenic", "environmental"), each = nrow(segments_df)))
+gg <- data.frame(rbind(segments_df[, c("Site", "nono", "anthro", "PA")]), conditions = rep(c("anthropogenic"), each = nrow(segments_df)))
 
-  
-  
-## ggradar
+gg$Site <- factor(gg$Site, as.character(unique(gg$Site)[order(aggregate(anthro ~ Site, gg, median)$anthro)]))
 
-xy_radar <- read.csv("Z:/modelling/yxtable.csv")  
-rm(list = ls(pattern = "radar_"))  
-for(Site in c("BWA_NOR", "KEN_LAI", "KEN_TSV", "XWA_TBC", "ZWE_MAT", "ZWE_ZV", "ZWE_SELV")) assign(paste0("radar_", Site), ggiraphExtra::ggRadar(data = xy_radar[xy_radar$Site == Site, c(splines, "HT", "Site")], aes(color = HT), scales = "free", rescale = T))
-ggiraphExtra::ggRadar(data = xy_radar[xy_radar$Site == Site, c(splines, "HT")], aes(color = HT), scales = "free", rescale = T, interactive = T)+ggtitle(Site)+theme(legend.position = "none")
+pdf(paste0(dropbox.file, "Master/Umweltwissenschaften/Masterarbeit/figures/anthropogenic_effect.pdf"), width = 8, height = 3.5)
+ggplot(gg)+
+  geom_boxplot(aes(y = 100 * anthro, x = Site, fill = as.factor(PA)))+
+  scale_y_continuous("habitat suitability [%]", breaks = c(0.25, 0.5, 1, 2))+
+  theme_bw()+
+  scale_fill_manual(name="",
+                    breaks=c(0, 1),
+                    labels=c( "not protected", "protected"), 
+                    values = c("azure3", "darkslategray4"))+
+  theme(text = element_text(size = 16), axis.text.x = element_text(angle = 30, hjust = 0.9), legend.position = "top")
+dev.off()
 
-do.call(gridExtra::grid.arrange, mget(ls(pattern = "radar_")))
+

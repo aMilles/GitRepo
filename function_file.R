@@ -253,8 +253,8 @@ marginal.quantiles <- function(marg.vars, effect.of, posterior.dist, original.df
         if(is.factor(ic.all)){
           unscaled.ic <- ic <- levels(ic.all)
         }else{
-          ic <- ic.all[c(10, 90)]
-          unscaled.ic <- original.seqs[c(10, 90),interaction]  
+          ic <- ic.all[c(1, 99)]
+          unscaled.ic <- original.seqs[c(1, 99),interaction]  
         }
         
         for(i in seq(length(ic))){
