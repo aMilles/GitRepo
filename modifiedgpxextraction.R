@@ -9,7 +9,7 @@ track.readGPX.element <- function(file) {
   # check if there is any content:
     # tracks:
       ret <- NULL
-      nu <- which(names(top) %in% element)
+      nu <- which(names(top) %in% "trk")
       for(c in seq_along(nu)){
         lst <- which(names(top[[nu[c]]]) %in% "trkseg")
         nm <- names(top[[nu[c]]][[lst[1]]][[1]])
@@ -35,4 +35,3 @@ track.readGPX.element <- function(file) {
   
   return(ret)
 }
-

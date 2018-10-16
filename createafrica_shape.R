@@ -18,4 +18,3 @@ writeOGR(africa3, dsn = "africa", layer = "africa_continent", driver = "ESRI Sha
 
 #borders of countries included
 writeOGR(africa, dsn = "africa", layer = "africa_countries", driver = "ESRI Shapefile")
-

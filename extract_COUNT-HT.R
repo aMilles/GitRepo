@@ -5,21 +5,23 @@ library(geosphere)
 library(rgeos)
 library(sf)
 setwd("Z:/GEC")
-
-segments_4326 <- readOGR(dsn = "segments.shp")
+segments_4326 <- readOGR(dsn = "segments_GEE.shp")
+segments_SC <- readOGR(dsn = "segments.shp")
+summary(segments_4326$time)
+#read GEC data.. select the observations codes you're interested in. 
 GEC <- readOGR(dsn = "GEC_points_eleonly.shp")
 GEC <- GEC[GEC$obsrvt_ %in% c("bh", "mh", "ele_unknown"), ]
 
 centroids <- centroid(segments_4326)
-
+segments_4326$ID <- as.character(segments_4326$ID)
+segments_SC$ID <- as.character(segments_SC$ID)
+segments <- merge(segments_4326, segments_SC)
 
 GEC$sg_nr <- NA
 GEC$d2sg <- NA
 GEC$td2sg <- NA
-
-SC = casefold(as.character(unique(segments_4326$SC)))[1]
-p = 1
-for(SC in casefold(as.character(unique(segments_4326$SC)))){
+table(GEC$srvy_cd)
+for(SC in casefold(as.character(unique(segments_SC$SC)))){
   seg_subset <- segments_4326[casefold(as.character(segments_4326$SC)) == SC,]
   SC_cents <- centroid(seg_subset)
   GEC_points <- GEC[casefold(as.character(GEC$srvy_cd)) == SC, ]
@@ -30,7 +32,7 @@ for(SC in casefold(as.character(unique(segments_4326$SC)))){
     GEC_points[p,"sg_nr"] <- as.character(seg_subset$ID[which.min(dists)])
     GEC_points[p,"d2sg"] <- dists[which.min(dists)]
     GEC_points[p,"td2sg"]<- as.numeric(difftime(as.POSIXct(GEC_points$utc_dt_[p], origin = "1970-01-01"),
-                                                as.POSIXct(seg_subset$gpx_time[which.min(dists)], origin = "1970-01-01"),
+                                                as.POSIXct(seg_subset$time[which.min(dists)], origin = "1970-01-01"),
                                                 units = "hour"))
     
   }

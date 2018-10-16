@@ -129,7 +129,7 @@ for(i in seq(5) - 1){
 
 plot(pr, actual)
 plot(rF$predictions, actual)
-SC_ss <- unify(SC, select.Year =  2, select.Month = 1:%)
+SC_ss <- unify(SC, select.Year =  2, select.Month = 1:5)
 SC_ss <- matrix(SC_ss, nc = 9)
 TC_ss <- unify(TC, select.Year =  2, select.Month = 1:9)
 TC_ss <- matrix(TC_ss, nc = 9)
@@ -179,4 +179,3 @@ ggplot(SCgg.agg, aes(x = month, y = value, group = variable, col = variable))+
   geom_line()+
   facet_wrap(~Site)
 
-plot(VD$X2010_02_iterator_0)

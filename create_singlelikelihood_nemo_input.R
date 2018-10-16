@@ -4,12 +4,6 @@ library(INLA)
 rm(list = ls()[which(ls() != "segments")])
 if(!"segments" %in% ls()) segments <- rgdal::readOGR("Z:/GEC/segments.shp")
 xy <- read.csv("C:/Users/amilles/Dropbox/modelling/yxtable_scaled_transformed.csv")[,-c(1)]
-xy <- read.csv("C:/Users/amilles/Dropbox/modelling/yxtable.csv")[,-c(1)]
-2291/sum(aggregate(COUNT ~ Site, xy[xy$COUNT > 0,], function(x) sum(x > 0))$COUNT)
-cbind(aggregate(SS ~ Site, xy[xy$COUNT > 0,], median),
-aggregate(SS ~ Site, xy[xy$COUNT == 0,], median)[,2])
-
-#xy <- read.csv("Z:/modelling/yxtable.csv")[,-c(1)]
 #create setup
 transformed = T
 model.type = "complex"
@@ -125,9 +119,8 @@ for(block in ls(pattern = "^xy_without_")) plot(is.na(get(block)$obs), pch = "|"
   save(list = ls()[!ls() %in% c("segments", "metric_segs")], file = paste0("Z:/NEMO_in/input_", output_name))
 }
 
+### DOES IT WORK? ###
 summary(dinla)
 f.nonspatial
 f.spatial
 inla.fun(x = xy[1:10,], formula = f.nonspatial, precision = precision, family = model.family, ridge = ridge)
-
-

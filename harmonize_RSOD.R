@@ -15,7 +15,7 @@ files <- files[-grep(files, pattern = "send_to")]
 #ZAF_Kru is empty
 files <- files[-grep(files, pattern = "ZAF_Kru")]
 
-#read excel files
+#read xlsx files
 datasets <- vector("list", length(files)) 
 for(i in seq(length(files))) datasets[[i]] <- as.data.frame(readxl::read_xlsx(files[i], skip = 1, sheet = "RSO"))
 
@@ -59,18 +59,19 @@ for(i in seq(length(files))){
 }
 
 
-#check wether there are NAS in count
+#check wether there are NAS in count and try to replace them
 for(i in seq(length(files))){
   df <- datasets[[i]]
-  
   if(sum(is.na(df$photo_corrected_count) & is.na(df$observed_count)) > 0){
+    print(basename(files[i]))
     print(sum(is.na(df$photo_corrected_count) & is.na(df$observed_count)))
-    if("number_out" %in% names(df)) df$photo_corrected_count[is.na(df$photo_corrected_count)] <- df$number_out[is.na(df$photo_corrected_count)]
+    if("number_out" %in% names(df)) df$photo_corrected_count[is.na(df$photo_corrected_count)] <- df$number_out[is.na(df$photo_corrected_count)] #number_out is a special case of XWA_TBC
     print(sum(is.na(df$photo_corrected_count) & is.na(df$observed_count)))
   } 
   
   df -> datasets[[i]]
 }
+#for ETH_BAB three NAs still remain, no NAs remain at other sites
 
 #####################################
 #### HARMONIZE OBSERVATION CODES ####
@@ -89,7 +90,7 @@ oc$name[grep(2, oc$name)] <- "car2"
 oc$name[grep(3, oc$name)] <- "car3"
 oc$name[grep(4, oc$name)] <- "car4"
 
-#from KEN_Mar, F= Fresh ...
+#at KEN_Mar, F= Fresh ...
 oc$name[grep("^f$", oc$name)] <- "car1"
 oc$name[grep("^r$", oc$name)] <- "car2"
 oc$name[grep("^o$", oc$name)] <- "car3"
@@ -137,12 +138,12 @@ oc$name[grep("eletrf$", oc$name)] <- "track"
 oc$name[grep("trace", oc$name)] <- "track"
 
 
-#misc, will rather not be considered
+#misc. categories
 oc$name[grep("buf", oc$name)] <- "misc"
 oc$name[grep("buffalo", oc$name)] <- "misc"
 oc$name[grep("tusk", oc$name)] <- "misc"
 
-#remaining unknowns, atm there are none!
+#insert remaining unknowns - currently (18-10-16) there are none!
 oc$name[!oc$name %in% c("bh", "mh", "track", "misc", "car1", "car2", "car3", "car4", "car_unknown", "ele_unknown")] <- "ele_uncertain"
 
 #replace the original observation codes in each dataset with the new classes
@@ -160,9 +161,9 @@ not.empty <- which(unlist(lapply(datasets, NROW)) > 0 &
 
 ds.names <- unlist(lapply(datasets, function(x) x$survey_code[1]))
 
-#5 files with trouble, COD_GAR hat utm only, COD_VIR has 2 missing lonlats, ETH_NW has one missing lonlat, KEN_TSV has ~10 missing longlat in 680 obs, ZWE_ZV has 2 missing observations in 700 obs. 
+#5 files with trouble, COD_GAR has utm only, COD_VIR has 2 missing lonlats, ETH_NW has one missing lonlat, KEN_TSV has ~10 missing longlat in 680 obs, ZWE_ZV has 2 missing observations in 700 obs. 
 
-#if datasets has utm, such as COD_GAR convert to lonlat wgs84, remove points without any spatial information
+#if datasets has utm, such as COD_GAR, convert to lonlat wgs84 and remove points without any spatial information
 
 for(i in seq(length(datasets))[-not.empty]){
   df <- datasets[[i]]
@@ -170,7 +171,7 @@ for(i in seq(length(datasets))[-not.empty]){
   #remove points with no spatial information
   if(length(which(is.na(df$lon) & is.na(df$utm_x)) > 0)) df <- df[-which(is.na(df$lon) & is.na(df$utm_x)),]
   
-  #which points have utm information, THIS IS CURRENTLY NOT GENERALIZED FOR ALL CASES, UTM WILL CURRENTLY BE TRANSFORMED FROM ONE UTM ZONE TO WGS84 - IF MORE UTM COORDINATES APPEAR, THIS HAS TO BE ADJUSTED!!!!!
+  #which points have utm information, THIS IS CURRENTLY NOT GENERALIZED FOR ALL CASES, UTM WILL CURRENTLY BE TRANSFORMED FROM ONE UTM ZONE TO WGS84 - IF MORE UTM COORDINATES APPEAR, THIS HAS TO BE ADJUSTED!!!!! Currently there are no new coordinates (2018-10-16)
   missing.lonlat <- which(is.na(df$lon) & !is.na(df$utm_x))
   
   if(length(missing.lonlat) > 0){
@@ -298,13 +299,6 @@ for(dataset in not.empty){
   local_tz <- df$tz[which(!is.na(df$tz) & df$tz != "")][1]
   
 
-  ## if no time information is given approx if possible... NOT IMPLEMENTED AT THE MOMENT!
-  # approx.try <- na.approx(df$local_time, maxgap = 2)
-  # if(length(approx.try) == length(df$local_time))  df$local_time <- approx.try 
-  ## ... or fill with 12:00 AM in seconds
-  # 
-  # df$local_time[is.na(df$local_time)] <- 43200
-  
   #if local times and timezone given but no utc time, convert to numeric time format with local time...
   no.utc.time <- which(is.na(df$utc_date_time) & !is.na(df$local_date))
   
@@ -360,10 +354,11 @@ xy <- red.df[, c("lon","lat")]
 spdf <- SpatialPointsDataFrame(coords = xy, data = red.df,
                                proj4string = CRS("+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0"))
 red.df$photo_corrected_count[is.na(red.df$photo_corrected_count)] <- red.df$observed_count[is.na(red.df$photo_corrected_count)] 
-summary(as.numeric(red.df$photo_corrected_count))
+
+#number of elephants observed at individual sites
+aggregate(photo_corrected_count ~ survey_code, spdf[red.df$observation_code %in% c("mh", "bh", "ele_unknown"),], FUN = function(x) sum(as.numeric(x), na.rm = T))
+
 writeOGR(spdf, "GEC_points.shp", "GEC_points.shp", "ESRI Shapefile")
 
 red.df_eleonly <- red.df[red.df$observation_code %in% c("mh", "bh", "ele_unkown"), ]
 writeOGR(spdf, "GEC_points_eleonly.shp", "GEC_points_eleonly.shp", "ESRI Shapefile")
-
-

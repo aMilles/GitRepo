@@ -211,12 +211,7 @@ effect_plot <- ggplot(ggall, aes(x = pred, y = mid, group = paste0(xval, interac
   xlab("predictor value")+
   guides(fill = guide_legend(title = "interaction", nrow = 2),  color = guide_legend(title = "interaction", nrow = 2), alpha = F)
 
-effect_plot
-
 
 pdf("C:/Users/amilles/Dropbox/Master/Umweltwissenschaften/Masterarbeit/figures/effect_plot_xval.pdf")
 effect_plot
 dev.off()
-
-which.max(ggall$lower.in)
-ggall[1801,]

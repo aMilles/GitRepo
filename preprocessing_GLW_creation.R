@@ -27,4 +27,3 @@ tlu <- africa * tlu
 
 #save raster file (will be uploaded to GEE)
 writeRaster(x = tlu, filename = "Z:/GLW/TLU.tif", overwrite = T)
-
