@@ -50,5 +50,3 @@ Export.table.toDrive({
   description: 'HD',
   selectors: ['ID', 'mean']
 })
-
-

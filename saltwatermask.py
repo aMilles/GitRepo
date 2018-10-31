@@ -20,10 +20,7 @@ var hull = /* color: #d63000 */ee.Geometry.Polygon(
 var gsw = ee.ImageCollection('JRC/GSW1_0/MonthlyHistory').filterDate('2014-01-01', '2015-12-31');
 var gsw_season = ee.ImageCollection('JRC/GSW1_0/MonthlyRecurrence');
 var countries = ee.FeatureCollection('USDOS/LSIB/2013');
-
-
 var africa = countries.filterMetadata('region', 'equals', 'AFRICA').union().first().geometry()
-
 var africa = ee.Geometry(africa)
 
 var hull = hull.difference(africa)

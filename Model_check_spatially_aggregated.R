@@ -37,65 +37,25 @@ if(model.family %in% c("binomial", "zeroinflated.binomial.0", "zeroinflated.bino
   if(!"obs" %in% names(xy)) xy$obs <- xy$dnd
 }
 
+#read the predictions from the models with and without the CAR model
+xy$spatial_pred <- spatial_model$summary.fitted.values$`0.5quant`
+xy$nonspatial_pred <- nonspatial_model$summary.fitted.values$`0.5quant`
+spatial_summary <- list(spatial_model$summary.fixed)
+nonspatial_summary <- list(nonspatial_model$summary.fixed)
+pred.site.names <- as.character(unique(xy$Site))
 
-if(xval){
-  identifier <- ifelse(xval.type %in% c("LOSO", "KOSI"), 4, 3)
-  spatial_summary <- nonspatial_summary <- vector("list", length(ls(pattern = "_nonspatial_model$")))
-  pred.site.names <- NULL
-  for(model in ls(pattern = "_nonspatial_model$")){
-    pred.site.name <- paste(strsplit(model, "_")[[1]][c(1:identifier)], collapse = "_")
-    pred.site <- get(pred.site.name)
-    where.na <- which(is.na(pred.site$obs))
-    if(xval.type == "KOSI") where.na <- -where.na
-    m <- get(model)
-    nonspatial_summary[[which(ls(pattern = "_nonspatial_model$") == model)]] <- rbind(summary(m)$fixed[,-7])
-    xy[, paste0("nonspatial_pred_", pred.site.name)] <- link.function(m$summary.linear.predictor$`0.5quant`)
-    xy[where.na, "nonspatial_pred"] <- link.function(m$summary.linear.predictor$`0.5quant`[where.na])
-    pred.site.names <- append(pred.site.names, pred.site.name)
-  } 
-  for(model in ls(pattern = "_spatial_model$")){
-    pred.site.name <- paste(strsplit(model, "_")[[1]][c(1:identifier)], collapse = "_")
-    pred.site <- get(pred.site.name)
-    where.na <- which(is.na(pred.site$obs))
-    if(xval.type == "KOSI") where.na <- -where.na
-    m <- get(model)
-    spatial_summary[[which(ls(pattern = "_spatial_model$") == model)]] <- rbind(summary(m)$fixed[,-7])
-    xy[, paste0("spatial_pred_", pred.site.name)] <- link.function(m$summary.linear.predictor$`0.5quant`)
-    xy[where.na, "spatial_pred"] <- link.function(m$summary.linear.predictor$`0.5quant`[where.na])
-    pred.site.names <- append(pred.site.names, pred.site.name)
-  }
-}
+###############################
+#### NON-SPATIAL ANALYSIS #####
+###############################
 
-if(!xval){
-  xy$spatial_pred <- spatial_model$summary.fitted.values$`0.5quant`
-  xy$nonspatial_pred <- nonspatial_model$summary.fitted.values$`0.5quant`
-  spatial_summary <- list(spatial_model$summary.fixed)
-  nonspatial_summary <- list(nonspatial_model$summary.fixed)
-  pred.site.names <- as.character(unique(xy$Site))
-}
-
-
+# get the model formula without random intercepts
 f.inla <- paste0(stringi::stri_replace_all_fixed(f,  "+ f(Site ,model=\"iid\") + f(PA ,model=\"iid\")", ""))
 f.ranger <- paste0("as.factor(obs) ~ ", paste(unique(strsplit(stringi::stri_replace_all_fixed(stringi::stri_replace_all_fixed(f.inla, ":", " "), "+ ", ""), " ")[[1]]), collapse = " + "))
 
 
-rF_preds <-  NULL
-if(all(is.na(xy$Block))) xy$Block <- xy$Site
-for(block in unique(xy$Block)){
-  rows = which(xy$Block == block)
-  rF <- ranger::ranger(f.ranger, xy[-rows,], probability = T, importance = "impurity")
-  p <- predict(rF, data = xy[rows,])$predictions[,1]
-  rF_preds <- append(rF_preds, p)
-}
-
-xy$rF_preds <- rF_preds
-
-# for(block in ls(pattern = "xy_without_")[seq(1,length(ls(pattern = "xy_without_")), 3)]) plot(is.na(get(block)$obs))
-# m$summary.linear.predictor$`0.5quant`
-
 fit_summary <- read.csv("Z:/residual_analysis/summary.csv", stringsAsFactors = F)[,-1]
 
-#Rough Summary
+#Calculate Efrons goodness of fit
 Efrons <- NULL
 for(i in c("spatial_pred", "nonspatial_pred", "rF_preds")){
   print(paste0(i, ": binomial sum ", sum(xy[,i])))
@@ -106,10 +66,11 @@ for(i in c("spatial_pred", "nonspatial_pred", "rF_preds")){
   print("####################")
 }
 
+#save it to a script
 if(!output_name %in% fit_summary$dataset) fit_summary<- rbind(fit_summary, c(output_name, Efrons, as.character(f.nonspatial)[3]))
 write.csv(fit_summary,"Z:/residual_analysis/summary.csv")
 
-#Fit by Site
+#Check the fit by site
 out <- NULL
 for(i in c("spatial_pred", "nonspatial_pred")){
   for(Site in unique(xy$Site)){
@@ -120,6 +81,7 @@ for(i in c("spatial_pred", "nonspatial_pred")){
   }
 }
 
+# plot the fit by site
 fit.df <- data.frame(matrix(out, nc = 2, byrow = T), model = rep(c("spatial", "non-spatial"), each = length(unique(xy$Site))), site = unique(xy$Site))
 names(fit.df)[1:2] <- c("detection_ratio", "effron's R-squared")
 ggplot(fit.df, aes(x = detection_ratio, y = `effron's R-squared`, group = model, col = site, fill = model, shape = model, color = model))+
@@ -199,9 +161,7 @@ names(segments_df)[c(1,2)] <- c("long", "lat")
 source("Z:/GitRepo/function_file.R")
 
 
-#save those plots in one pdf
-
-### PREDICTIONS WITH RANDOM EFFECTS (SPATIAL AND NON-SPATIAL) ####
+#### PREDICTIONS WITH RANDOM EFFECTS (SPATIAL AND NON-SPATIAL) ####
 
 #spatial
 
@@ -237,7 +197,7 @@ pred_map2nsp
 dev.off()
 
 
-### PREDICT WITHOUT RANDOM EFFECTS ####
+#### PREDICT WITHOUT RANDOM EFFECTS ####
 
 
 if(!"df_backup" %in% ls()) df_backup <- segments_df
@@ -272,8 +232,9 @@ inla.pred.map <- map_site(df = segments_df, o = "obs", p = "log10inla.pred", plo
    ggtitle("")
 
 dev.off()
-###predict at the time of minimum HS  
 
+
+#### predict at the time of minimum HS - RQ 2 ####
 xy.m <- xy_backup
 xy.m$Block <- NULL
 
@@ -287,7 +248,6 @@ xy_season <- na.omit(xy.m)
 segments_df <- segments_df[na.omit(match(as.character(xy_season$ID), as.character(segments_df$ID))), ]
 
 # create predictions
-
 xy.minHS <- xy_season
 m <- model.matrix(as.formula(paste0("obs ~", f.inla)), xy.minHS)
 minHSprob <- invlogit(m %*% samples)
@@ -295,6 +255,7 @@ minHSprob <- apply(data.frame(minHSprob), 1, median)
 segments_df$minHSprob <- minHSprob
 segments_df$log10minHSprob <- log10(minHSprob)
 
+# map of HS at the time of minimum HS
 pred_minHS_minHS_map <- map_site(df = segments_df, o = "obs", p = "log10minHSprob", plot.what = "p", title = paste0("Prediction: ", Site), buffer.it = T, lower = F, plot.range = c(-5, 0))
 pdf(paste0(dropbox.file, "Master/Umweltwissenschaften/Masterarbeit/figures/Map_noLD.pdf"), onefile = T)
 pred_minHS_minHS_map+
@@ -304,6 +265,32 @@ pred_minHS_minHS_map+
   ggtitle("")
 dev.off()
 
+#### Supplement - map with environmental effects only ####
+
+#generate a scenario with anthropogenic effects set to the same level
+xy.enviro <- xy_season
+xy.enviro$HD <- 0
+xy.enviro$LD <- 0
+xy.enviro$AD <- 0
+xy.enviro$AR <- 0
+m <- model.matrix(as.formula(paste0("obs ~", f.inla)), xy.enviro)
+enviro <- invlogit(m %*% samples)
+enviro <- apply(data.frame(enviro), 1, median)
+segments_df$enviro <- enviro
+segments_df$log10enviro <- log10(enviro)
+
+#create the map
+pred_enviro <- map_site(df = segments_df, o = "obs", p = "log10enviro", plot.what = "p", title = paste0("Prediction: ", Site), buffer.it = T, lower = F, plot.range = c(-5, 0))
+pdf(paste0(dropbox.file, "Master/Umweltwissenschaften/Masterarbeit/figures/pred_enviro.pdf"), onefile = T)
+pred_enviro+
+  scale_fill_gradientn(colors = viridis::inferno(5), limits = c(-3, -1), na.value = viridis::inferno(5)[1])+
+  guides(fill = guide_colorbar(title = "log10(habitat suitability)"), color = F)+
+  theme(text = element_text(size = 12), axis.text.x = element_text(size = 9, angle = 30), axis.text.y = element_text(size = 9, angle = 30))+
+  ggtitle("")
+dev.off()
+
+
+#### Supplement - map with anthropogenic effects only ####
 
 #generate a scenario with environmental effects set to the same level
 xy.anthro <- xy_season
@@ -318,47 +305,7 @@ anthro <- apply(data.frame(anthro), 1, median)
 segments_df$anthro <- anthro
 segments_df$log10anthro <- log10(anthro)
 
-
-#generate a scenario with anthropogenic effects set to the same level
-xy.enviro <- xy_season
-xy.enviro$HD <- 0
-xy.enviro$LD <- 0
-xy.enviro$AD <- 0
-xy.enviro$AR <- 0
-m <- model.matrix(as.formula(paste0("obs ~", f.inla)), xy.enviro)
-enviro <- invlogit(m %*% samples)
-enviro <- apply(data.frame(enviro), 1, median)
-segments_df$enviro <- enviro
-segments_df$log10enviro <- log10(enviro)
-
-
-xy.nono <- xy_season
-xy.nono$HD <- min(xy.nono$HD)
-xy.nono$LD <- min(xy.nono$LD)
-xy.nono$AD <- min(xy.nono$AD)
-xy.nono$AR <- min(xy.nono$AR)
-xy.nono$SS[] <- 0
-xy.nono$NB[] <- 0
-xy.nono$TD[] <-  0
-xy.nono$VD[] <-  0
-xy.nono$WA[] <-  0
-m <- model.matrix(as.formula(paste0("obs ~", f.inla)), xy.nono)
-nono <- invlogit(m %*% samples)
-nono <- apply(data.frame(nono), 1, median)
-segments_df$nono <- nono
-segments_df$log10nono <- log10(nono)
-
-
-
-pred_enviro <- map_site(df = segments_df, o = "obs", p = "log10enviro", plot.what = "p", title = paste0("Prediction: ", Site), buffer.it = T, lower = F, plot.range = c(-5, 0))
-pdf(paste0(dropbox.file, "Master/Umweltwissenschaften/Masterarbeit/figures/pred_enviro.pdf"), onefile = T)
-pred_enviro+
-  scale_fill_gradientn(colors = viridis::inferno(5), limits = c(-3, -1), na.value = viridis::inferno(5)[1])+
-  guides(fill = guide_colorbar(title = "log10(habitat suitability)"), color = F)+
-  theme(text = element_text(size = 12), axis.text.x = element_text(size = 9, angle = 30), axis.text.y = element_text(size = 9, angle = 30))+
-  ggtitle("")
-dev.off()
-
+#create the map
 pred_anthro <- map_site(df = segments_df, o = "obs", p = "log10anthro", plot.what = "p", title = paste0("Prediction: ", Site), buffer.it = T, lower = F, plot.range = c(-5, 0))
 pdf(paste0(dropbox.file, "Master/Umweltwissenschaften/Masterarbeit/figures/pred_anthro.pdf"), onefile = T)
 pred_anthro+
@@ -369,42 +316,7 @@ pred_anthro+
 dev.off()
 
 
-
-#### aggreagte LAND USE CHANGE ####
-comp.LUCCdf <- segments_df[, c("enviro", "PA", "Site", "sampef")]
-check <- aggregate(LUCC_perc ~ Site, FUN = spatstat::weighted.median, w = 1/comp.LUCCdf$sampef,  data = comp.LUCCdf)
-#comp.LUCC <- aggregate(LUCC_perc ~ PA + Site, FUN = spatstat::weighted.median, w = 1/comp.LUCCdf$sampef, data = comp.LUCCdf)
-comp.LUCC <- aggregate(LUCC_perc ~ PA + Site, FUN = median, data = comp.LUCCdf)
-names(comp.LUCC) <- c("PA", "Site", "LUCC_perc")
-
-comp.LUCC$Site <- factor(comp.LUCC$Site, levels = check$Site[order(check$LUCC_perc)])
-
-pdf(paste0(dropbox.file, "Master/Umweltwissenschaften/Masterarbeit/figures/change_habitatsuitability.pdf"), onefile = T)
-ggplot(comp.LUCC, aes(x = Site, y = LUCC_perc, fill = as.factor(PA)))+
-  geom_bar(stat="identity",position="dodge")+
-  coord_flip()+
-  scale_fill_manual(name="",
-                      breaks=c(0, 1),
-                      labels=c( "not protected", "protected"), 
-                      values = c("azure3", "darkslategray4"))+
-  theme_bw()+
-  ylab("median change of habitat suitability [%]")+
-  xlab("")+
-  theme(legend.position = "top", text = element_text(size = 20), panel.grid.major.y = element_line(size = 1, colour = c("gray90")), panel.grid.minor.x = element_blank(), panel.grid.major.x = element_blank())
-dev.off()
-
-a <- map_site(df = segments_df, o = "obs", p = "LUCC_perc", plot.what = "p", title = paste0("Prediction: ", Site), buffer.it = T, lower = F, plot.range = c(-5, 0))+
-  scale_fill_gradientn(colors = viridis::inferno(5), limits = c(-60, 5), na.value = viridis::inferno(5)[1])+
-  guides(fill = guide_colorbar(title = "change in habitat suitability [%]"))+
-  theme(text = element_text(size = 12), axis.text.x = element_text(size = 9, angle = 30), axis.text.y = element_text(size = 9, angle = 30))+
-  ggtitle("")
-  
-a+
-  scale_fill_gradientn(colors = viridis::inferno(5), limits = c(-60, 5), na.value = viridis::inferno(5)[1])+
-  guides(fill = guide_colorbar(title = "change in habitat suitability [%]"))+
-  theme(text = element_text(size = 12), axis.text.x = element_text(size = 9, angle = 30), axis.text.y = element_text(size = 9, angle = 30))+
-  ggtitle("")
-#### Sensitivity / Elasticity ####
+#### RQ 4 - Sensitivities / Elasticities ####
 full.names <- data.frame(matrix(c("WA", "WA - distance to water [km]",
                                   "AD", "AD - agricultural density [%]",
                                   "HD", "HD - human density [people/km²]",
@@ -454,7 +366,7 @@ aggchange <- merge(aggchange, full.names)
 weird <- scales::trans_new("signed_log",
                            transform=function(x) sign(x)*log10(abs(x)),
                            inverse=function(x) sign(x)*(10^abs(x)))
-aggchange
+
 pdf(paste0(dropbox.file, "Master/Umweltwissenschaften/Masterarbeit/figures/change_habitatsuitability_elasticity.pdf"), onefile = T)
 ggplot(aggchange, aes(y = prob, x = site, fill = prob > 0))+
   geom_abline(intercept = 0, slope = 0)+
@@ -471,15 +383,14 @@ ggplot(aggchange, aes(y = prob, x = site, fill = prob > 0))+
 dev.off()
 
 
-gg <- data.frame(rbind(segments_df[, c("Site", "nono", "anthro")], setNames(segments_df[, c("Site", "nono", "enviro")], c("Site", "nono", "anthro"))), conditions = rep(c("anthropogenic", "environmental"), each = nrow(segments_df)))
-gg <- data.frame(rbind(segments_df[, c("Site", "nono", "anthro", "PA")]), conditions = rep(c("anthropogenic"), each = nrow(segments_df)))
-
+#### RQ 3 - impact of anthropogenic effects ####
+gg <- data.frame(rbind(segments_df[, c("Site", "anthro", "PA")]), conditions = rep(c("anthropogenic"), each = nrow(segments_df)))
 gg$Site <- factor(gg$Site, as.character(unique(gg$Site)[order(aggregate(anthro ~ Site, gg, median)$anthro)]))
 
 pdf(paste0(dropbox.file, "Master/Umweltwissenschaften/Masterarbeit/figures/anthropogenic_effect.pdf"), width = 8, height = 3.5)
 ggplot(gg)+
   geom_boxplot(aes(y = anthro, x = Site, fill = as.factor(PA)))+
-  scale_y_continuous("habitat suitability", breaks = c(0.25, 0.5, 1, 2), minor_breaks = NULL)+
+  scale_y_continuous("habitat suitability", breaks = c(0, 1, 2)/100)+
   theme_bw()+
   scale_fill_manual(name="",
                     breaks=c(0, 1),
@@ -488,5 +399,3 @@ ggplot(gg)+
   theme(text = element_text(size = 16), axis.text.x = element_text(angle = 30, hjust = 0.9), legend.position = "top")+
   xlab("site")
 dev.off()
-
-

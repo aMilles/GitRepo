@@ -11,8 +11,8 @@ summary <- data.frame(start = Sys.time(), end = NA, name = output_name)
 
 nb2INLA(paste0(tools::file_path_sans_ext(output_name),"_nb.txt"), dinla)
 print(paste0("created nb: ", paste0(tools::file_path_sans_ext(output_name),"_nb.txt")))
-#nb2INLA("dinla.txt", dinla)
 
+#run a cross validation
 if(xval){
   for(site_input in ls(pattern = "^xy_without")){
     df <- get(site_input)
@@ -22,6 +22,7 @@ if(xval){
   }
 }
 
+#full model run
 if(!xval){
   xy.model <- xy
   xy.model$ID <- 1:nrow(xy)

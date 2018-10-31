@@ -8,12 +8,14 @@ library(doParallel)
 library(gridExtra)
 library(ranger)
 
-#read Model output from nemo
+#read Model output from nemo (LOSO-runs and full model)
 load("Z:/NEMO_out/output_all_complex_binomial_nonspatial_spatial_6km_prec1e-04.RData")
 load("Z:/NEMO_out/output_all_complex_binomial_nonspatial_spatial_xval_LOSO_6km_prec1e-04.RData")
 
+#remove nonspatial model run
 rm(list = ls(pattern = "nonspatial"))
 
+#extract CI of fixed effects
 model <- ls(pattern = "spatial_model")[1]
 out <- vector("list", length = length(ls(pattern = "spatial_model")))
 for(i in seq(length(ls(pattern = "spatial_model")))){
@@ -25,7 +27,7 @@ for(i in seq(length(ls(pattern = "spatial_model")))){
 }
 
 
-
+#process dataframe
 coefs <- data.frame(do.call(rbind, out))
 coefs$predictor <- row.names(out[[1]])
 coefs$model <- rep(ls(pattern = "spatial_model"), each = nrow(out[[1]]))
@@ -34,16 +36,16 @@ coefs$midrel <- (coefs[1:nrow(out[[1]]),2] - coefs[,2])
 coefs$region <- region <- apply(do.call(rbind, strsplit(coefs$model, "_"))[,c(3,4)], 1, paste, collapse = "_")
 coefs$region[coefs$region == "spatial"] <- NA
 
-
+#reverse coefficients if box-cox lambda was negative --> better interpretation
 tf_sheet <- read.csv("C:/Users/amilles/Dropbox/modelling/transform_sheet.csv")
 reverse <- tf_sheet$name[tf_sheet$value < 0]
-reverse
 for(pred in reverse){
   rows <- (stringi::stri_count_regex(as.character(coefs$predictor), pred)) > 0
   coefs[rows, c(1:3)] <- coefs[rows, c(1:3)] * -1
   
 }
 
+#only highlight regions with high impact on CI
 coefs$region[coefs$region == "spatial_model"] <- NA 
 coefs$region[!coefs$region %in% c(NA, "BWA_NOR", "COD_GAR", "KEN_TSV", "ZWE_SELV", "XWA_TBC")] <- "other (n = 11)"
 coefs$region <- factor(coefs$region, levels = c("BWA_NOR", "COD_GAR", "KEN_TSV", "ZWE_SELV", "XWA_TBC", "other (n = 11)"))
@@ -51,8 +53,8 @@ unique(coefs$region)
 
 colors <- RColorBrewer::brewer.pal(6, "Accent")
 colors[4] <- "gray70"
-colors
-levels(coefs$region)
+
+#plot CI
 xval <- ggplot(coefs[-(1:nrow(out[[1]])),], aes(x = predictor, y = mid, fill = region))+
   geom_abline(aes(intercept = 0, slope = 0), col = "navyblue", size =2)+
   geom_crossbar(aes(ymin = low, ymax = up, y = mid), color = NA, alpha = 1)+
@@ -69,6 +71,3 @@ xval
 pdf("C:/Users/amilles/Dropbox/Master/Umweltwissenschaften/Masterarbeit/figures/xval.pdf", width = 8, height = 5)
 xval
 dev.off()
-
-
-

@@ -49,4 +49,3 @@ Export.table.toDrive({
     fileFormat: '',
     selectors: ['ID', 'max']
 })
-

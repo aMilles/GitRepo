@@ -53,7 +53,7 @@ xy_future$SC <- 3600 * 3 * xy_future$SC
 
 
 table(xy_future$Site[is.na(xy_future$VD)])
-
+summary(xy_future)
 write.csv(xy_future, "C:/Users/amilles/Dropbox/modelling/yxtable_season.csv")
 
 gg_season <- data.frame(xy_future[,c("ID", "Site", "Country", "month", preds)])
@@ -67,6 +67,12 @@ names(gg_season.agg) <- c("site", "month", "predictor", "country", "q2.5", "q50"
 colors <- viridis::cividis(length(unique(gg_season$Site)))
 colors <- sample(colors, length(colors))
 library(ggplot2)
+
+
+gg_season.agg[gg_season.agg$pred == "VD", c("q50", "q2.5","q97.5")] <- gg_season.agg[gg_season.agg$pred == "VD", c("q50", "q2.5","q97.5")] / 10000
+gg_season.agg[gg_season.agg$pred == "TC", c("q50", "q2.5","q97.5")] <- gg_season.agg[gg_season.agg$pred == "TC", c("q50", "q2.5","q97.5")] - 273.15
+gg_season.agg[gg_season.agg$pred == "WA", c("q50", "q2.5","q97.5")] <- gg_season.agg[gg_season.agg$pred == "WA", c("q50", "q2.5","q97.5")] / 1000
+
 season.plot <- ggplot(gg_season.agg, aes(x = month, y = q50, ymin = q2.5, ymax = q97.5, col = site, fill = site, group = site))+
   geom_ribbon(alpha = .5)+
   geom_line()+
@@ -78,77 +84,81 @@ season.plot <- ggplot(gg_season.agg, aes(x = month, y = q50, ymin = q2.5, ymax =
   scale_x_discrete(breaks=levels(gg_season.agg$month)[c(2,7,11)])+
   theme_bw()
 
-tf_sheet <- read.csv("C:/Users/amilles/Dropbox/modelling/transform_sheet.csv", stringsAsFactors = F)
-scale_sheet <- read.csv("C:/Users/amilles/Dropbox/modelling/scale_sheet.csv", stringsAsFactors = F)
-
-for(pred in seq(length(tf_sheet$name))){
-  
-  name = tf_sheet$name[pred]
-  shift = tf_sheet$shift[pred]
-  tf = tf_sheet$value[pred]
-  
-  scale = scale_sheet$scale[pred]
-  center = scale_sheet$center[pred]
-  
-  if(is.na(name)) name <- "NA."
-  
-  cov <- xy_future[,name]
-  
-  cov <- cov - shift
-  cov <- cov^tf
-  cov <- (cov - center) / scale
-  
-  print(summary(cov))
-  
-}
-
-xy_season <- xy[,c("ID", "Site", "Country")]
-
-
-
-old_Country <- "Start"
-site_number <- data.frame(Site = NA, count = NA)
-for(Site in as.character(unique(xy$Site))){
-  
-  Country = strsplit(Site, "_")[[1]][1]
-  
-  if(Country != old_Country){ 
-    count = 1
-  }else{
-    count = count + 1
-  } 
-  
-  site_number <- rbind(site_number, data.frame(Site = Site, count = count))
-  old_Country = Country
-  
-}
-
-site_number <- site_number[-1,]
-
-all.preds <- do.call(rbind, mget(preds))
-xy_season$ID <- as.character(xy_season$ID)
-all.xy <- base::merge(xy_season, all.preds, by = "ID")
-gg_season <- reshape2::melt(all.xy, id.vars = c("Site", "pred", "Country", "ID"))
-gg_season$value[gg_season$pred == "SC"] <- gg_season$value[gg_season$pred == "SC"] * 3 *3600
-gg_season$value[gg_season$pred == "WA"] <- gg_season$value[gg_season$pred == "WA"] / 1000
-gg_season$variable <- rep(seq.Date(as.Date("2014-01-01"), as.Date("2014-12-31"), by= "month"), each = nrow(gg_season)/12)
-gg_season <- merge(gg_season, site_number, by = "Site")
-
 pdf("C:/Users/amilles/Dropbox/Master/Umweltwissenschaften/Masterarbeit/figures/seasonality_predictors.pdf")
-ggplot(gg_season, aes(group = Site, x = variable, y = value, color = Site))+
-  geom_smooth(alpha = .1, se = F)+
-  facet_grid(pred~Country, scales = "free")+
-  scale_x_date(date_breaks = "3 months", date_labels = "%b")+
-  xlab("month")+
-  ylab("predictor value")+
-  scale_color_manual(values = sample(viridis::viridis(16), 16))+
-  guides(linetype = guide_legend(title = "Site Number"))+
-  theme_light()+
-  theme(legend.position = "top")
+season.plot
 dev.off()
-
-
-
+# 
+# tf_sheet <- read.csv("C:/Users/amilles/Dropbox/modelling/transform_sheet.csv", stringsAsFactors = F)
+# scale_sheet <- read.csv("C:/Users/amilles/Dropbox/modelling/scale_sheet.csv", stringsAsFactors = F)
+# 
+# for(pred in seq(length(tf_sheet$name))){
+#   
+#   name = tf_sheet$name[pred]
+#   shift = tf_sheet$shift[pred]
+#   tf = tf_sheet$value[pred]
+#   
+#   scale = scale_sheet$scale[pred]
+#   center = scale_sheet$center[pred]
+#   
+#   if(is.na(name)) name <- "NA."
+#   
+#   cov <- xy_future[,name]
+#   
+#   cov <- cov - shift
+#   cov <- cov^tf
+#   cov <- (cov - center) / scale
+#   
+#   print(summary(cov))
+#   
+# }
+# 
+# xy_season <- xy[,c("ID", "Site", "Country")]
+# 
+# 
+# 
+# old_Country <- "Start"
+# site_number <- data.frame(Site = NA, count = NA)
+# for(Site in as.character(unique(xy$Site))){
+#   
+#   Country = strsplit(Site, "_")[[1]][1]
+#   
+#   if(Country != old_Country){ 
+#     count = 1
+#   }else{
+#     count = count + 1
+#   } 
+#   
+#   site_number <- rbind(site_number, data.frame(Site = Site, count = count))
+#   old_Country = Country
+#   
+# }
+# 
+# site_number <- site_number[-1,]
+# 
+# all.preds <- do.call(rbind, mget(preds))
+# xy_season$ID <- as.character(xy_season$ID)
+# all.xy <- base::merge(xy_season, all.preds, by = "ID")
+# gg_season <- reshape2::melt(all.xy, id.vars = c("Site", "pred", "Country", "ID"))
+# gg_season$value[gg_season$pred == "SC"] <- gg_season$value[gg_season$pred == "SC"] * 3 *3600
+# gg_season$value[gg_season$pred == "WA"] <- gg_season$value[gg_season$pred == "WA"] / 1000
+# gg_season$variable <- rep(seq.Date(as.Date("2014-01-01"), as.Date("2014-12-31"), by= "month"), each = nrow(gg_season)/12)
+# gg_season <- merge(gg_season, site_number, by = "Site")
+# 
+# pdf("C:/Users/amilles/Dropbox/Master/Umweltwissenschaften/Masterarbeit/figures/seasonality_predictors.pdf")
+# ggplot(gg_season, aes(group = Site, x = variable, y = value, color = Site))+
+#   geom_smooth(alpha = .1, se = F)+
+#   facet_grid(pred~Country, scales = "free")+
+#   scale_x_date(date_breaks = "3 months", date_labels = "%b")+
+#   xlab("month")+
+#   ylab("predictor value")+
+#   scale_color_manual(values = sample(viridis::viridis(16), 16))+
+#   guides(linetype = guide_legend(title = "Site Number"))+
+#   theme_light()+
+#   theme(legend.position = "top")
+# dev.off()
+# 
+# 
+# 
 
 
 
@@ -168,6 +178,9 @@ for(i in seq(length(pred.choice))){
 for(i in pred.choice) drive_download(path = paste0("Z:/climate_change/", preds[i,1]), file = preds[i,], overwrite = T)
 for(pred in list.files("Z:/climate_change")) assign(gsub(".csv", "", pred), read.csv(paste0("Z:/climate_change/", pred)))
 
+rm.rows <- which(TC_cc$mean == 0)
+TC_cc <- TC_cc[-rm.rows, ]
+SC_cc <- SC_cc[-rm.rows, ]
 
 TC_cc$year <- SC_cc$year <- rep(as.factor(c(1950, 2015, 2100)), each = nrow(SC_cc)/3)
 TC_cc$month <- SC_cc$month <- rep(rep(months, each = nrow(SC_cc)/36))

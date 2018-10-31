@@ -11,7 +11,7 @@ var getCentroids = function(feature) {
 var centroids = seg.map(getCentroids);
 
 var centroids_buffer = centroids.map(function(feature) {
-  return feature.buffer(5000);
+  return feature.buffer(10000);
 });
 
 
@@ -69,4 +69,3 @@ Export.table.toDrive({
     fileFormat: '',
     selectors: ['ID', 'mean']
 });
-

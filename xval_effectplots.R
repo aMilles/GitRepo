@@ -71,7 +71,6 @@ if(nrow(unscaled_df) != nrow(xy)) unscaled_df <- unscaled_df[as.character(unscal
   #use the nearest scaled+transformed value for each scaled+transformed quantile to get an estimate of the splines
   if(!all(is.na(splines))){
     for(spline in splines){
-      #this.spline <- data.frame((spliner(c(scaled_transformed[,spline], seqs[,spline]), n.knots)[seq(100)+nrow(scaled_transformed), ]))
       close <- sapply(seqs[,spline], function(x) which.min(abs(x - xy[,spline])))
       this.spline <- xy[close,paste0(spline, seq(n.knots))]
       names(this.spline) <- paste0(spline, seq(n.knots))
@@ -85,10 +84,6 @@ if(nrow(unscaled_df) != nrow(xy)) unscaled_df <- unscaled_df[as.character(unscal
   seqs[,missing.preds] <- unique(xy[,missing.preds])
   
   interactions <- preds[as.logical(stringi::stri_count_fixed(preds, ":"))]
-  
-  # for(interaction in preds[as.logical(stringi::stri_count_fixed(preds, ":"))]){
-  #   seqs[, interaction] <- model.matrix(as.formula(paste0("~", interaction)), seqs)[,2]
-  # }
   seqs <- cbind("(Intercept)" = 1, seqs)
 }
 apply(seqs[,-22], 2, median)

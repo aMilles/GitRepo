@@ -10,9 +10,9 @@ dropbox.file = "C:/Users/amilles/Dropbox/"
 
 #read csv.files
 xy_season <- read.csv(paste0(dropbox.file, "modelling/yxtable_season.csv"), row.names = 1)
-names(xy)
-xy <- read.csv(paste0(dropbox.file, "modelling/yxtable.csv"), row.names = 1)
 
+xy <- read.csv(paste0(dropbox.file, "modelling/yxtable.csv"), row.names = 1)
+names(xy_season)
 xy_seasonbackup -> xy_season
 names(xy_season)[match(c("AI", "NA.", "PI"), names(xy_season))] <- c("AD", "SS", "AR")
 xy_season$AR <- xy$AR
@@ -20,7 +20,7 @@ xy_season$HD <- xy$HD
 xy_season$VD <- xy_season$VD / 10000
 xy_season$WA <- xy_season$WA / 1000
 xy_season$TC <- xy_season$TC - 273.15
-summary(xy_season$AR)
+summary(xy_season)
 xy_season <- na.omit(xy_season) 
 
 #combine seasons and xy to transform and scale them in one run.
@@ -163,10 +163,22 @@ rquery.cormat.spearman(cbind(all.preds[seq(nrow(xy)), which(!names(scale_transfo
 
 
 #correlation between transformed + scaled values
-spearman <- rquery.cormat.spearman(scale_transformed[seq(nrow(xy)), which(!names(scale_transformed) %in% c("REPS", "ID", "CC", "HT", "PA", "COUNT", "Country", "Transect", "Site"))])$r
-pdf(paste0(dropbox.file, "Master/Umweltwissenschaften/Masterarbeit/figures/corplot.pdf"), width = 4, height = 4)
-spearman
+source("Z:/GitRepo/modified_cormat.R")
+pdf(paste0(dropbox.file, "Master/Umweltwissenschaften/Masterarbeit/figures/corplot_all.pdf"), onefile = T)
+for(sc in unique(scale_transformed$Site)){
+  df <- scale_transformed[seq(nrow(xy)), which(!names(scale_transformed) %in% c("REPS", "ID", "CC", "HT", "PA", "COUNT", "Country", "Transect"))]
+  df <- df[df$Site == sc,]
+  df$Site <- NULL
+  spearman <- rquery.cormat.spearman(df, main = sc)$r
+  print(spearman)
+}
 dev.off()
+
+df <- scale_transformed[seq(nrow(xy)), which(!names(scale_transformed) %in% c("REPS", "ID", "CC", "HT", "PA", "COUNT", "Country", "Transect", "Site"))]
+pdf(paste0(dropbox.file, "Master/Umweltwissenschaften/Masterarbeit/figures/corplot.pdf"), onefile = T)
+rquery.cormat.spearman(df, main = NULL)$r
+dev.off()
+
 spearman <- data.frame(apply(spearman, 1, function(x) as.numeric(as.character(x))))
 cornames <- names(spearman) 
 spearman$names <- cornames

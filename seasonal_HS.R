@@ -5,6 +5,7 @@ library(rgdal)
 dropbox.file = "C:/Users/amilles/Dropbox/"
 source("https://raw.githubusercontent.com/aMilles/GitRepo/master/function_file.R")
 
+#read model output
 load("Z:/NEMO_out/output_all_complex_binomial_nonspatial_spatial_6km_prec1e-04.RData")
 
 segments <- readOGR(paste0(dropbox.file, "modelling/segments_GEE.shp"))
@@ -16,13 +17,14 @@ segments$ID <- as.character(segments$ID)
 xy_season <- read.csv(paste0(dropbox.file, "/modelling/yxtable_season_scaled_transformed.csv"))
 season_backup -> xy_season
 
-summary(SC_cc)
-
+#prepare seasonal dataset for prediction with model output
 times <- as.Date(as.numeric(strftime(segments$time, format = "%j")), origin = "1970-01-01")
 xy$time <- NA
 
 months <- seq.Date(as.Date("1970-01-01"), as.Date("1970-12-01"), "month")
 xy <- xy[match(as.character(xy_season$ID), as.character(xy$ID)),]
+
+#replace predictors at the time of observation with seasonal predictors
 xy[, c("VD", "WA", "TC", "SC")] <- xy_season[, c("VD", "WA", "TC", "SC")]
 xy_season <- xy
 xy_season$month <- rep(months, each = nrow(xy_season)/12)
@@ -35,6 +37,8 @@ time <- xy_season$time
 xy_season$CC <- factor(xy_season$CC[1], levels = levels(xy$CC))
 
 names(xy_season)
+
+#create model formula without random effects
 f.inla <- paste0(stringi::stri_replace_all_fixed(f,  "+ f(Site ,model=\"iid\") + f(PA ,model=\"iid\")", ""))
 m <- model.matrix(as.formula(paste0("~", f.inla)), xy_season)
 dist <- as.matrix(sample.fixed.params(spatial_model, 10))
@@ -55,7 +59,7 @@ names(gg_season.agg) <- c("Site", "month", "Country", "lower", "mid", "upper")
 gg_season.agg$ID <- NA
 gg_season.agg$time <- as.Date(0, origin = "1970-01-01")
 
-#calculate accumulated habitat suitability
+#calculate accumulated habitat suitability (3-months)
 gg_season.agg$mm <- NA
 for(Site in unique(gg_season.agg$Site)){
   ss <- gg_season.agg[gg_season.agg$Site == Site,]
@@ -77,6 +81,7 @@ n.sites<- table(unlist(strsplit(as.character(unique(gg_season$Site)), "_"))[seq(
 colors <- NULL
 for(i in n.sites) colors <- append(colors, viridis::viridis(i, begin = .1, end = .8))
 
+#create plot of seasonal variation of habitat suitability
 hs_season <- ggplot(gg)+
   geom_ribbon(data = gg[seq(row.nr),], aes(x = month, ymin = lower, ymax = upper, group = Site), fill = "red", alpha = .5)+
   #scale_fill_manual(values = colors)+
@@ -119,7 +124,9 @@ table$WA <- table$WA / 1000
 signif(table, 2)
 psych::df2latex(table)
 
-paste0(as.numeric(as.factor(get.mins$Site, gg$Site[seq(row.nr)])
+paste0(as.numeric(as.factor(get.mins$Site, gg$Site[seq(row.nr)])))
+                  
+                  
 ##############################
 # SECTION BELOW WAS NOT USED #
 ##############################
@@ -242,6 +249,3 @@ if(F){
   hs_season
   dev.off()
 }
-
-
-

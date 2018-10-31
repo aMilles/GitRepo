@@ -1,10 +1,14 @@
-library('plotKML')
+library(plotKML)
 library(rgdal)
 library(stringi)
 library(XML)
 library(xml2)
+library(ggplot2)
+
 segments <- readOGR("Z:/GEC/segments.shp")
 
+source("Z:/GitRepo/modifiedgpxextraction.R")
+gpx.files <- list.files("Z:/GEC", pattern = ".gpx$", recursive = T)
 
 #extract dates of the gpx files, times are set to 8am - this will be used if gpx does not contain times
 ext <- regmatches(basename(gpx.files), gregexpr("\\d+\\d", basename(gpx.files)))
@@ -17,13 +21,12 @@ dates <- lapply(ext, function(x){
 })
 
 #read all .gpx files - if there is no date replace with dates given above
-gpx.files <- list.files("Z:/GEC", pattern = ".gpx$", recursive = T)
-SC <- "AGO_Lui"
+SC = "AGO_Lui"
 for(SC in as.character(unique(segments$SC))){
   SC.gpx.files <- gpx.files[stri_count_regex(gpx.files,SC) >= 1]
   
   for(gpx.file in SC.gpx.files){
-    assign(basename(gpx.file), do.call(rbind, lapply(track.readGPX.element(paste0("Z:/GEC/", gpx.file)), 
+    assign(basename(gpx.file), do.call(rbind, lapply(track.readGPX.element(file = paste0("Z:/GEC/", gpx.file)), 
                                       function(x){
       if(length(x[[1]]$time) == 0) x[[1]]$time <- dates[[which(gpx.file == gpx.files)]]
         return(x[[1]][, c("lon", "lat", "time")])
@@ -37,7 +40,7 @@ for(SC in as.character(unique(segments$SC))){
 }       
 
 
-#THERE ARE .GPX-Files - handle these case by using the date(times) given in the .xlsx files
+#THERE ARE SITES WITHOUT .GPX-Files - handle these case by using the date(times) given in the .xlsx files
 
 ##GET BWA_NOR as it has no .gpx but complete FSO
 BWA_NOR_gpx.tot <- readxl::read_xlsx("Z:/GEC/raw_data/BWA_NOR/normalized/BWA_NOR_elephants.xlsx", col_names = T, skip = 1, sheet = "FSO")
@@ -59,8 +62,7 @@ XWA_TBC_gpx.tot <- XWA_TBC_gpx.tot[, c("lon", "lat", "time")]
 
 
 #HARMONIZE THE DATES AND COMBINE THEM INTO A SINGLE .GPX-FILE
-rm(all.gpx.tot)
-all.gpx.tot <- mget(ls(pattern = "gpx.tot"))
+all.gpx.tot <- mget(ls(pattern = "_gpx.tot"))
 SC <- rep(names(all.gpx.tot), lapply(all.gpx.tot, function(x) NROW(x)))
 all.gpx.tot <- do.call(rbind, all.gpx.tot)
 all.gpx.tot$SC <- gsub("_gpx.tot", "", SC)
@@ -94,7 +96,7 @@ for(SC in SC.with.missing.dates){
 all.gpx.tot <- do.call(rbind, gpx.list)
 rm(gpx.list)
 
-#NOW ALL POINT DATA THAS HAS BEEN COLLECTED DURING THE GEC HAS BEEN COMBINED INTO ONE DATAFRAME (all.gpx.tot) WITH DATETIMES - THOSE CAN NOW BE USED TO ASSIGN DATES TO THE TRANSECT SEGMENTS.
+#NOW ALL POINT DATA THAS HAS BEEN COLLECTED DURING THE GEC, HAS BEEN COMBINED INTO ONE DATAFRAME (all.gpx.tot) WITH DATETIMES.
 
 segments$gpx_time <- NA
 segments$TS <-unlist(lapply(strsplit(as.character(segments$ID), "p"), function(x) x[1]))
@@ -119,7 +121,14 @@ for(SC in casefold(as.character(unique(segments$SC)))){
 }
 
 #check how the assigned dates look like and if they produce consistent results
-for(i in unique(segments$SC)) plot(as.POSIXct(segments$gpx_time[segments$SC == i], tz = "UTC", origin = "1970-01-01"), main = i)
+pdf("C:/Users/amilles/Dropbox/Master/Umweltwissenschaften/Masterarbeit/figures/timestamps.pdf")
+ggplot(data.frame(segments), aes(x = as.numeric(ID), y = as.POSIXct(gpx_time, tz = "UTC", origin = "1970-01-01")))+
+        geom_point()+
+        facet_wrap(~SC, scales = "free")+
+  xlab("ID level")+
+  ylab("Time")
+dev.off()
+    
 
 #are there any NAS (should not be the case!!)
 unique(segments$SC[which(is.na(segments$gpx_time))])

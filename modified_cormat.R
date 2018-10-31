@@ -2,7 +2,7 @@
 
 rquery.cormat.spearman <- function(x, type=c('lower', 'upper', 'full', 'flatten'),
          graph=TRUE, graphType=c("correlogram", "heatmap"),
-         col=NULL, cor.method = "spearman", ...)
+         col=NULL, cor.method = "spearman", main, ...)
 {
   library(corrplot)
   # Helper functions
@@ -67,10 +67,10 @@ rquery.cormat.spearman <- function(x, type=c('lower', 'upper', 'full', 'flatten'
   # Correlogram
   if(graph & graphType[1]=="correlogram"){
     corrplot(cormat, type=ifelse(type[1]=="flatten", "lower", type[1]),
-             tl.col="black", tl.srt=45,col=col,...)
+             tl.col="black", tl.srt=45,col=col, main = main, ...)
   }
   else if(graphType[1]=="heatmap")
-    heatmap(cormat, col=col, symm=TRUE)
+    heatmap(cormat, col=col, symm=TRUE, main = main)
   # Get lower/upper triangle
   if(type[1]=="lower"){
     cormat<-getLower.tri(cormat)
