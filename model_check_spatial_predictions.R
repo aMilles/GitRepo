@@ -316,6 +316,19 @@ pred_anthro+
 dev.off()
 
 
+#### Supplement - maps with all predictors
+for(pred in c("AD", "AR", "HD", "LD", "NB", "PA", "SC", "TC", "TD", "VD", "WA")){
+  segments_df$map_pred <- segments_df[,pred]
+    assign(paste0("predmap_", pred), map_site(df = segments_df, o = "obs", p = "map_pred", plot.what = "p", title = paste0("Prediction: ", Site), buffer.it = T, lower = F, plot.range = c(-5, 0)))
+}
+
+pdf("C:/Users/amilles/Dropbox/Master/Umweltwissenschaften/Masterarbeit/figures/all_predictors.pdf", onefile = T)
+for(map in ls(pattern = "predmap_")){
+  print(get(map))
+}
+dev.off()
+
+
 #### RQ 4 - Sensitivities / Elasticities ####
 full.names <- data.frame(matrix(c("WA", "WA - distance to water [km]",
                                   "AD", "AD - agricultural density [%]",

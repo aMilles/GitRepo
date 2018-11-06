@@ -125,8 +125,6 @@ theme_bw()+
   theme(text = element_text(size = 20), legend.position = "top", panel.grid.major.x = element_line(color = c("gray90", NA), size = 14), panel.grid.major.y = element_line(color = c("gray90"), linetype = "solid"), panel.grid.minor.y =  element_line(color = NA) ,axis.text.x = element_text(angle = 30, hjust = .9))+
   scale_y_continuous(trans = weird, breaks = c(-100, -50, -20, -10, - 5, 0, 5, 20, 10, 50, 100, 200, 500, 1000), limits = c(-100, 1000))
 dev.off()
-
-
 ##########
 ### This part was not used - here I tried to model predictors from CC and LUCC scenarios ###
 ############
